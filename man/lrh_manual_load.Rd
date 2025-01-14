@@ -4,10 +4,12 @@
 \alias{lrh_manual_load}
 \title{Load manual data from an Excel sheet}
 \usage{
-lrh_manual_load(xl_loc)
+lrh_manual_load(xl_loc, simplify = TRUE)
 }
 \arguments{
 \item{xl_loc}{Location of the excel file}
+
+\item{simplify}{Should one-column tables be imported as vectors?}
 }
 \value{
 invisibly, the global environment

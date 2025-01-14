@@ -6,15 +6,21 @@
 #' be skipped (e.g. ".validation" or ".directions")
 #'
 #' @param xl_loc Location of the excel file
+#' @param simplify Should one-column tables be imported as vectors?
 #'
+#' @md
 #' @returns invisibly, the global environment
 #' @export
-lrh_manual_load <- function(xl_loc) {
+lrh_manual_load <- function(xl_loc, simplify = TRUE) {
   wb <- openxlsx2::wb_load(xl_loc)
 
   dat <- lrh_manual_names(wb) |>
     purrr::set_names() |>
     purrr::map(\(sheet) openxlsx2::wb_to_df(wb, sheet) |> tibble::as_tibble())
+
+  if (simplify) {
+    dat <- purrr::map(dat, \(df) if (ncol(df) == 1) df[[1]] else df)
+  }
 
   invisible(list2env(dat, envir = .GlobalEnv))
 }
@@ -26,6 +32,7 @@ lrh_manual_load <- function(xl_loc) {
 #'
 #' @param xl_loc Location of the excel file OR an openxlsx2 workbook object
 #'
+#' @md
 #' @returns a character vector of sheet names / variable names
 #' @export
 lrh_manual_names <- function(xl_loc) {

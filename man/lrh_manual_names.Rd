@@ -14,5 +14,5 @@ a character vector of sheet names / variable names
 }
 \description{
 Gives the list of variables that would be imported for a given manual excel
-sheet by [lrh_manual_load].
+sheet by \link{lrh_manual_load}.
 }
