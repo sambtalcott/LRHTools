@@ -29,3 +29,19 @@ prep_ym <- function(file, date, fmt = "%Y-%m", sep = ".") {
 prep_y <- function(file, date, fmt = "%Y", sep = ".") {
   prep_ymd(file, date, fmt, sep)
 }
+
+#' Format display months for plots
+#'
+#' Designed to be used in `scale_x_date()` or `scale_x_datetime()`. Formats the
+#' months of the year so that the first displayed month of each year gets a year
+#' (e.g. "Jan 2024") and following months get only the month ("Feb")
+#'
+#' @param x A vector of dates or date/times
+#'
+#' @returns A character vector for displays
+#' @export
+#' @md
+lab_ym <- function(x) {
+  dplyr::if_else(x == min(x, na.rm = TRUE) | lubridate::month(x) == 1,
+          format(x, "%b\n%Y"), format(x, "%b"))
+}
