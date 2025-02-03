@@ -19,11 +19,13 @@ prep_ymd <- function(file, date, fmt = "%Y-%m-%d", sep = ".") {
 }
 
 #' @rdname prep_ymd
+#' @export
 prep_ym <- function(file, date, fmt = "%Y-%m", sep = ".") {
   prep_ymd(file, date, fmt, sep)
 }
 
 #' @rdname prep_ymd
+#' @export
 prep_y <- function(file, date, fmt = "%Y", sep = ".") {
   prep_ymd(file, date, fmt, sep)
 }
