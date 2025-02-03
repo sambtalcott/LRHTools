@@ -1,15 +1,29 @@
 #' Prepend a formatted date on the file name
 #'
+#' Prepends a date to the file part of a file location string. So the location
+#' `foo/bar.csv` becomes `foo/2025-01-01.bar.csv`. `prep_ymd()` uses a default
+#' of YYYY-MM-DD. `prep_ym()` uses a default of YYYY-MM, and `prep_y()` uses YYYY
+#'
 #' @param file File name
 #' @param date Date reference
 #' @param fmt Formatting string. See [strptime] for details
-#' @param sep Separator
+#' @param sep Separator between date and filename
 #'
 #' @md
 #' @returns a formatted file name with the date prepended followed by "."
 #' @export
-prep_date <- function(file, date, fmt = "%Y-%m-%d", sep = ".") {
+prep_ymd <- function(file, date, fmt = "%Y-%m-%d", sep = ".") {
   base <- basename(file)
   folder <- stringr::str_remove(file, stringr::fixed(base))
   paste0(folder, format(date, fmt), sep, base)
+}
+
+#' @rdname prep_ymd
+prep_ym <- function(file, date, fmt = "%Y-%m", sep = ".") {
+  prep_ymd(file, date, fmt, sep)
+}
+
+#' @rdname prep_ymd
+prep_y <- function(file, date, fmt = "%Y", sep = ".") {
+  prep_ymd(file, date, fmt, sep)
 }
