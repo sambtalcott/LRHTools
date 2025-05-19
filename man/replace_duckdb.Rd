@@ -4,7 +4,7 @@
 \alias{replace_duckdb}
 \title{Replace rows in a table}
 \usage{
-replace_duckdb(x, table, delete_where, db_file = lrh_db, con = NULL)
+replace_duckdb(x, table, delete_where, db_file = lrh_db(), con = NULL)
 }
 \arguments{
 \item{x}{Object (data frame) to be appended}
@@ -13,7 +13,7 @@ replace_duckdb(x, table, delete_where, db_file = lrh_db, con = NULL)
 
 \item{delete_where}{String of a SQL Where selection for rows to delete}
 
-\item{db_file}{Location of the duckdb file (defaults to [lrh_db])}
+\item{db_file}{Location of the duckdb file (defaults to [lrh_db()])}
 
 \item{con}{(Optional) connection object if you are already connected to the DB.}
 }

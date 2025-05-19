@@ -52,3 +52,42 @@ test_that("handles new columns gracefully", {
   DBI::dbWriteTable(con, "TEST2", t2)
   expect_equal(append_duckdb(t2, "TEST2", con = con), 0)
 })
+
+test_that("lastupdate works as expected", {
+
+  # Temporary database
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  # Example data frames
+  d1 <- data.frame(
+    x = 1:5,
+    x_update = 10:6
+  )
+  d2 <- cbind(d1, x_update_dt_tm = c(4,5,8,2,3))
+  d3 <- cbind(d2, y_update_dt_tm = 2:6)
+
+  DBI::dbWriteTable(con, "D1", d1)
+  DBI::dbWriteTable(con, "D2", d2)
+  DBI::dbWriteTable(con, "D3", d3)
+
+  # No matching column
+  expect_error(lastupdate_duckdb("D1", con = con), "no columns containing")
+  expect_equal(lastupdate_duckdb("D1", dt_col = "x_update", con = con), 10)
+
+  # Exactly one matching column
+  expect_equal(lastupdate_duckdb("D2", con = con), 8)
+  expect_equal(lastupdate_duckdb("D2", dt_col = "x", con = con), 5)
+
+  # More than one matching column
+  expect_error(lastupdate_duckdb("D3", con = con), "multiple possible columns")
+  expect_equal(lastupdate_duckdb("D3", dt_col = "y_update_dt_tm", con = con),
+               6)
+
+  # Test alert
+  expect_message(lastupdate_alert_duckdb("D2", con = con), "last updated on")
+
+  # Test atleast
+  lastupdate_min_duckdb("D2", 7, con = con) # Expect no error
+  expect_error(lastupdate_min_duckdb("D2", 9, con = con), "last updated on")
+})

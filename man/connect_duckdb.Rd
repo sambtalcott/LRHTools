@@ -4,10 +4,19 @@
 \alias{connect_duckdb}
 \title{Helper function to connect to the LRH DuckDB}
 \usage{
-connect_duckdb(db_file = lrh_db, ...)
+connect_duckdb(
+  db_file = lrh_db(),
+  timezone_out = "America/New_York",
+  tz_out_convert = "with",
+  ...
+)
 }
 \arguments{
-\item{db_file}{Location of the DuckDB. Defaults to [lrh_db]}
+\item{db_file}{Location of the DuckDB. Defaults to [lrh_db()]}
+
+\item{timezone_out}{Timezone to use for pulling date-time columns}
+
+\item{tz_out_convert}{"with" or "force"}
 
 \item{...}{Optional additional arguments}
 }

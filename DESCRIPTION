@@ -19,16 +19,22 @@ Imports:
     DBI,
     dplyr,
     duckdb,
+    httr2,
     janitor,
+    keyring,
     lubridate,
+    Microsoft365R,
     openxlsx2,
     purrr,
-    readxl,
+    readr,
+    rlang,
+    rstudioapi,
     stringr,
     tibble,
     tntpr
 RoxygenNote: 7.3.2
 Suggests: 
     ggplot2,
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    writexl
 Config/testthat/edition: 3

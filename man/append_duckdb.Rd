@@ -4,14 +4,20 @@
 \alias{append_duckdb}
 \title{Append only unique rows to a duckdb table}
 \usage{
-append_duckdb(x, table, db_file = lrh_db, remove_duplicates = TRUE, con = NULL)
+append_duckdb(
+  x,
+  table,
+  db_file = lrh_db(),
+  remove_duplicates = TRUE,
+  con = NULL
+)
 }
 \arguments{
 \item{x}{Object (data frame) to be appended}
 
 \item{table}{Table to append to}
 
-\item{db_file}{Location of the duckdb file (defaults to \link{lrh_db})}
+\item{db_file}{Location of the duckdb file (defaults to \code{\link[=lrh_db]{lrh_db()}})}
 
 \item{remove_duplicates}{Should duplicate rows be removed? Defaults to TRUE.}
 

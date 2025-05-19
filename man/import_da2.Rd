@@ -2,27 +2,34 @@
 % Please edit documentation in R/import_da2.R
 \name{import_da2}
 \alias{import_da2}
-\title{Import from an \code{XLSX} DA2 Export File}
+\title{Import from an DA2 Query CSV}
 \usage{
 import_da2(
-  loc,
-  first_header,
-  filter_out = c(NA, "Total Cases:"),
-  clean_names = TRUE
+  file,
+  guess_max = Inf,
+  ddb_reference = NULL,
+  tz = "America/New_York",
+  ...
 )
 }
 \arguments{
-\item{loc}{File location}
+\item{file}{file location}
 
-\item{first_header}{The first header title. Used to identify the starting row}
+\item{guess_max}{from \code{readr::read_csv()}. Defaults to infinite (slightly
+slower, but no errors)}
 
-\item{filter_out}{A character vector of A values to filter out.}
+\item{ddb_reference}{Optional: A duckdb table name to use as a reference for
+the input. This ensures columns are read with the same column types as the
+duckdb table. Uses \code{pull_duckdb()}}
 
-\item{clean_names}{Should column names be cleaned with \code{janitor::clean_names()}?}
+\item{tz}{Timezone to use when converting date/time columns}
+
+\item{...}{Other arguments passed on to \code{readr::read_csv()}}
 }
 \value{
 a tibble
 }
 \description{
-Import from an \code{XLSX} DA2 Export File
+Convenience function. Imports the csv (assuming infinite guessing), cleans
+column names and converts any timestamp columns
 }
