@@ -308,6 +308,9 @@ lrh_tableau_folder <- function() {
   lrh_tab
 }
 
+#' @export
+lrh_test <- "Test"
+
 
 #' Helper function to connect to the LRH DuckDB
 #'
