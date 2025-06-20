@@ -38,21 +38,18 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
 #' @param file path to write to (defaults to tempfile)
 #' @param open open the file after writing? By default, opens tempfiles but not
 #' other files
+#' @param na what NA values are written as
 #'
 #' @returns the path, invisibly
 #' @export
 #'
 #' @md
 lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
-                      file = NULL, open = is.null(file)) {
+                      file = NULL, open = is.null(file), na = "") {
 
   force(open)
   # Get x to be a list of dataframes (if only a single dataframe was provided)
-  if (!is.data.frame(x[[1]])) {
-    nm <- deparse(substitute(x))
-    x <- list(x)
-    names(x) <- nm
-  }
+  if (!is.data.frame(x[[1]])) x <- list(x)
 
   if (!is.null(names(x))) x <- janitor::clean_names(x)
 
@@ -61,7 +58,7 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
   purrr::iwalk(x, \(df, nm) {
     wb$
       add_worksheet(nm)$
-      add_data_table(x = df, table_style = table_style)$
+      add_data_table(x = df, table_style = table_style, na.strings = na)$
       set_col_widths(cols = 1:ncol(df), widths = "auto")
   })
 

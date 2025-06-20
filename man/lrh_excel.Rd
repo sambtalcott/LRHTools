@@ -9,7 +9,8 @@ lrh_excel(
   widths = "auto",
   table_style = "TableStyleMedium1",
   file = NULL,
-  open = is.null(file)
+  open = is.null(file),
+  na = ""
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ lrh_excel(
 
 \item{open}{open the file after writing? By default, opens tempfiles but not
 other files}
+
+\item{na}{what NA values are written as}
 }
 \value{
 the path, invisibly
