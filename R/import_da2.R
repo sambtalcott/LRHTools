@@ -29,6 +29,8 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
     c_list <- purrr::map(ref, \(x) {
       if (inherits(x, "POSIXct") || inherits(x, "POSIXt") || is.character(x)) {
         readr::col_character()
+      } else if (inherits(x, "Date")) {
+        readr::col_date(format = "%m/%d/%Y")
       } else if (is.double(x)) {
         readr::col_double()
       } else if (is.integer(x)) {
@@ -89,7 +91,9 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
 #'
 #' @md
 parse_dt_tm <- function(x, tz) {
-  if (any(stringr::str_detect(x, ":"))) {
+  if (inherits(x, "Date") | inherits(x, "POSIXct")) {
+    x
+  } else if (any(stringr::str_detect(x, ":"))) {
     lubridate::mdy_hm(x, tz = tz)
   } else {
     lubridate::mdy(x)
