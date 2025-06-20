@@ -72,10 +72,26 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
   y <- x |>
     janitor::clean_names() |>
     dplyr::mutate(dplyr::across(dplyr::contains("dt_tm"),
-                                \(x) lubridate::mdy_hm(x, tz = tz)))
+                                \(x) parse_dt_tm(x, tz = tz)))
 
   # If there were issues importing x, attach them to y
   attr(y, "problems") <- attr(x, "problems")
 
   return (y)
+}
+
+#' Internal parse date-time function
+#'
+#' @param x character vectorf
+#' @param tz Timezone to use when converting date/time columns
+#'
+#' @returns a date-time or date columnb
+#'
+#' @md
+parse_dt_tm <- function(x, tz) {
+  if (any(stringr::str_detect(x, ":"))) {
+    lubridate::mdy_hm(x, tz = tz)
+  } else {
+    lubridate::mdy(x)
+  }
 }
