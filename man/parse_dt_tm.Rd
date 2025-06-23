@@ -7,12 +7,12 @@
 parse_dt_tm(x, tz)
 }
 \arguments{
-\item{x}{character vectorf}
+\item{x}{character vector}
 
 \item{tz}{Timezone to use when converting date/time columns}
 }
 \value{
-a date-time or date columnb
+a date-time or date column
 }
 \description{
 Internal parse date-time function

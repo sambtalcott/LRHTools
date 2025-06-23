@@ -84,16 +84,16 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
 
 #' Internal parse date-time function
 #'
-#' @param x character vectorf
+#' @param x character vector
 #' @param tz Timezone to use when converting date/time columns
 #'
-#' @returns a date-time or date columnb
+#' @returns a date-time or date column
 #'
 #' @md
 parse_dt_tm <- function(x, tz) {
   if (inherits(x, "Date") | inherits(x, "POSIXct")) {
     x
-  } else if (any(stringr::str_detect(x, ":"))) {
+  } else if (isTRUE(any(stringr::str_detect(x, ":")))) {
     lubridate::mdy_hm(x, tz = tz)
   } else {
     lubridate::mdy(x)
