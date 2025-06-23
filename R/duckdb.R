@@ -102,11 +102,13 @@ pull_duckdb <- function(table, db_file = lrh_db(), con = NULL, max_rows = Inf) {
 #' @param x dataframe
 #' @param con (Optional) connection object if you are already connected to the DB.
 #' @param db_file Location of the duckdb file (defaults to [lrh_db()])
+#' @param overwrite Overwrite a current table (if it exists)?
 #'
 #' @returns x (invisibly)
 #' @export
 #' @md
-write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db()) {
+write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db(),
+                            overwrite = FALSE) {
   # Connect to the DuckDB database if connection isn't provided
   if (is.null(con)) {
     con <- connect_duckdb(db_file = db_file)
@@ -119,7 +121,7 @@ write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db()) {
   ft <- rlang::set_names(rep("TIMESTAMPTZ", length(dt_fields)), dt_fields)
 
   # Write table
-  DBI::dbWriteTable(con, table, x, field.types = ft)
+  DBI::dbWriteTable(con, table, x, field.types = ft, overwrite = overwrite)
 
   # Check that times are still correct after pulling
   y <- DBI::dbGetQuery(con, paste0("SELECT * FROM ", table, " LIMIT 10"))
