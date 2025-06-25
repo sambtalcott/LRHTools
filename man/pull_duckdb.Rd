@@ -4,14 +4,10 @@
 \alias{pull_duckdb}
 \title{Quickly pull a table from Duck DB}
 \usage{
-pull_duckdb(table, db_file = lrh_db(), con = NULL, max_rows = Inf)
+pull_duckdb(table, max_rows = Inf)
 }
 \arguments{
 \item{table}{Name of table}
-
-\item{db_file}{Location of the duckdb file (defaults to [lrh_db()])}
-
-\item{con}{(Optional) connection object if you are already connected to the DB.}
 
 \item{max_rows}{Maximum number of rows to pull (by default, pulls all)}
 }

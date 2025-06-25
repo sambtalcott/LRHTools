@@ -6,26 +6,16 @@
 \alias{lastupdate_min_duckdb}
 \title{Get The time a table as last updated}
 \usage{
-lastupdate_duckdb(table, dt_col = NULL, db_file = lrh_db(), con = NULL)
+lastupdate_duckdb(table, dt_col = NULL)
 
-lastupdate_alert_duckdb(table, dt_col = NULL, db_file = lrh_db(), con = NULL)
+lastupdate_alert_duckdb(table, dt_col = NULL)
 
-lastupdate_min_duckdb(
-  table,
-  min_dt,
-  dt_col = NULL,
-  db_file = lrh_db(),
-  con = NULL
-)
+lastupdate_min_duckdb(table, min_dt, dt_col = NULL)
 }
 \arguments{
 \item{table}{Table name}
 
 \item{dt_col}{the date column of the table. If not provided, will search for a column that includes "update_dt_tm".}
-
-\item{db_file}{Location of the duckdb file (defaults to \code{\link[=lrh_db]{lrh_db()}})}
-
-\item{con}{(Optional) connection object if you are already connected to the DB.}
 
 \item{min_dt}{Generates an error if the last update time is less than this value.}
 }

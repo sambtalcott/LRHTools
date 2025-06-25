@@ -2,7 +2,7 @@
 % Please edit documentation in R/duckdb.R
 \name{connect_duckdb}
 \alias{connect_duckdb}
-\title{Helper function to connect to the LRH DuckDB}
+\title{Helper function to connect to the LRH DuckDB (now wraps lrh_con())}
 \usage{
 connect_duckdb(
   db_file = lrh_db(),
@@ -24,5 +24,5 @@ connect_duckdb(
 a database connection
 }
 \description{
-Helper function to connect to the LRH DuckDB
+Helper function to connect to the LRH DuckDB (now wraps lrh_con())
 }

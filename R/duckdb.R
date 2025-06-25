@@ -1,24 +1,93 @@
-# Package-specific environment for storing the database location
+# Package-specific environment for storing the database location, driver, and connection
 .ddb_env <- new.env(parent = emptyenv())
+
+# Basic usage idea: lrh_con() pulls the correct connection. con_write()
+# pulls a writeable connection, which is closed/replaced with read-only at the next
+# lrh_con()
+
+#' Database Connection Helper
+#'
+#' Returns a connection to the current duckdb database. Stores the driver and
+#' connection in a package-level environment for use between calls. If calling for
+#' a different type of connection, closes the original connection before opening
+#' the new one and returning it.
+#'
+#' @param db_file Location of the DuckDB. Defaults to [lrh_db()]
+#' @param timezone_out Timezone to use for pulling date-time columns
+#' @param tz_out_convert "with" or "force"
+#' @param ... Optional additional arguments
+#' @param type Either "read_only" or "read_write". Defaults to "read_only"
+#'
+#' @returns a database connection
+#' @md
+#' @export
+lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
+                    tz_out_convert = "with", type = "read_only", ...) {
+
+  # Process type
+  if (type == "read_only") {
+    ro <- TRUE
+  } else if (type == "read_write") {
+    ro <- FALSE
+  } else {
+    cli::cli_abort("{.arg type} must be one of {.val read_only} or {.val read_write}")
+  }
+
+  # If existing matching connection, return it
+  if (!is.null(.ddb_env$con) && .ddb_env$con_type == type) {
+    return (.ddb_env$con)
+  }
+
+  # If existing non-matching connection, close it
+  if (!is.null(.ddb_env$con) && .ddb_env$con_type != type) {
+    lrh_disconnect()
+    cli::cli_alert_info("Switching connection to {.val {type}}")
+  }
+
+  # Create and save ro connection
+  .ddb_env$drv <- duckdb::duckdb(dbdir = db_file, read_only = ro)
+  .ddb_env$con <- DBI::dbConnect(.ddb_env$drv, timezone_out = timezone_out,
+                                 tz_out_convert = tz_out_convert, ...)
+  .ddb_env$con_type <- type
+
+  # General connection setup
+  # Set autoload (for using things like 'today' in patient days view)
+  DBI::dbExecute(.ddb_env$con, "SET autoinstall_known_extensions = 1;")
+  DBI::dbExecute(.ddb_env$con, "SET autoload_known_extensions = 1;")
+
+  # Set timezone (for importing) to UTC
+  DBI::dbExecute(.ddb_env$con, "SET TimeZone = 'UTC';")
+
+  # return the connection
+  .ddb_env$con
+}
+
+#' Disconnect from DuckDB
+#'
+#' @returns nothing
+#' @export
+lrh_disconnect <- function() {
+  if (!is.null(.ddb_env$con)) {
+    duckdb::duckdb_shutdown(.ddb_env$drv)
+    DBI::dbDisconnect(.ddb_env$con)
+    .ddb_env$con <- NULL
+    .ddb_env$drv <- NULL
+    .ddb_env$con_type <- NULL
+  }
+}
 
 #' Append only unique rows to a duckdb table
 #'
 #' @param x Object (data frame) to be appended
 #' @param table Table to append to
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
 #' @param remove_duplicates Should duplicate rows be removed? Defaults to TRUE.
-#' @param con (Optional) connection object if you are already connected to the DB.
 #'
 #' @md
 #' @returns nothing
 #' @export
-append_duckdb <- function(x, table, db_file = lrh_db(), remove_duplicates = TRUE, con = NULL) {
-  # Connect to the DuckDB database if connection isn't provided
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    # In this case, set up a disconnect when the function ends
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+append_duckdb <- function(x, table, remove_duplicates = TRUE) {
+  # Connect to the DuckDB database in read_write
+  con <- lrh_con(type = "read_write")
 
   # Check if the table already exists in the DuckDB database
   existing_tables <- DBI::dbListTables(con)
@@ -51,16 +120,14 @@ append_duckdb <- function(x, table, db_file = lrh_db(), remove_duplicates = TRUE
 #' @param x Object (data frame) to be appended
 #' @param table Table name
 #' @param delete_where String of a SQL Where selection for rows to delete
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
-#' @param con (Optional) connection object if you are already connected to the DB.
 #'
 #' @returns Nothing
 #' @export
-replace_duckdb <- function(x, table, delete_where, db_file = lrh_db(), con = NULL) {
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+replace_duckdb <- function(x, table, delete_where) {
+
+  # Connect to the DuckDB database in read_write
+  con <- lrh_con(type = "read_write")
+
   del_query <- paste("DELETE FROM", table, "WHERE", delete_where)
   n_del <- DBI::dbExecute(con, del_query)
   cli::cli_inform(c("i" = "Removed {.val {n_del}} row{?s}"))
@@ -75,19 +142,14 @@ replace_duckdb <- function(x, table, delete_where, db_file = lrh_db(), con = NUL
 #' use existing `DBI` functions.
 #'
 #' @param table Name of table
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
-#' @param con (Optional) connection object if you are already connected to the DB.
 #' @param max_rows Maximum number of rows to pull (by default, pulls all)
 #'
 #' @returns a tibble
 #' @export
-pull_duckdb <- function(table, db_file = lrh_db(), con = NULL, max_rows = Inf) {
-  # Connect to the DuckDB database if connection isn't provided
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    # In this case, set up a disconnect when the function ends
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+pull_duckdb <- function(table, max_rows = Inf) {
+
+  # Connect to the DuckDB database in read_only
+  con <- lrh_con()
 
   q <- paste0("Select * FROM ", table)
   if (max_rows != Inf) q <- paste0(q, " LIMIT ", max_rows)
@@ -100,21 +162,15 @@ pull_duckdb <- function(table, db_file = lrh_db(), con = NULL, max_rows = Inf) {
 #'
 #' @param table Name of table to write to
 #' @param x dataframe
-#' @param con (Optional) connection object if you are already connected to the DB.
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
 #' @param overwrite Overwrite a current table (if it exists)?
 #'
 #' @returns x (invisibly)
 #' @export
 #' @md
-write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db(),
-                            overwrite = FALSE) {
-  # Connect to the DuckDB database if connection isn't provided
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    # In this case, set up a disconnect when the function ends
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+write_tz_duckdb <- function(table, x, overwrite = FALSE) {
+
+  # Connect to the DuckDB database in read_write
+  con <- lrh_con(type = "read_write")
 
   # Determine which fields should be written as TIMESTAMPTZ
   dt_fields <- names(purrr::keep(x, lubridate::is.POSIXct))
@@ -131,6 +187,7 @@ write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db(),
   } else {
     cli::cli_alert_success("Wrote table {.val {table}} with TZs")
   }
+
   invisible(x)
 }
 
@@ -143,15 +200,13 @@ write_tz_duckdb <- function(table, x, con = NULL, db_file = lrh_db(),
 #' @param x data frame to update
 #' @param id_col the id column of the table
 #' @param dt_col the date column of the table
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
-#' @param con (Optional) connection object if you are already connected to the DB.
 #' @param od_folder The folder to save the .csv file in for `upsert_duckdb_od()`
 #' @param loc_folder The folder to save the .cvs file in for `upsert_duckdb_local()`
 #'
 #' @returns number of rows affected
 #' @export
 #' @md
-upsert_duckdb <- function(table, x, id_col, dt_col, db_file = lrh_db(), con = NULL) {
+upsert_duckdb <- function(table, x, id_col, dt_col) {
 
   # Check that x is unique by primary key (crashes R otherwise)
   if (!identical(x[[id_col]], unique(x[[id_col]]))) {
@@ -161,12 +216,8 @@ upsert_duckdb <- function(table, x, id_col, dt_col, db_file = lrh_db(), con = NU
     cli::cli_abort(c("x" = "{.var x} contains NAs in {.var {id_col}}"))
   }
 
-  # Connect to the DuckDB database if connection isn't provided
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    # In this case, set up a disconnect when the function ends
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+  # Connect to the DuckDB database in read_write
+  con <- lrh_con(type = "read_write")
 
   # Check / alter the primary key column
   sch <- DBI::dbGetQuery(con, stringr::str_glue("PRAGMA table_info({table})"))
@@ -213,12 +264,12 @@ upsert_duckdb <- function(table, x, id_col, dt_col, db_file = lrh_db(), con = NU
 #' Upsert into DuckDB AND write .csv to OneDrive for Tableau
 #' @export
 #' @rdname upsert_duckdb
-upsert_duckdb_od <- function(table, x, id_col, dt_col, db_file = lrh_db(), con = NULL,
+upsert_duckdb_od <- function(table, x, id_col, dt_col,
                              od_folder = "Documents/.database/Tableau Data") {
   cli::cli_status("{.info Updating in DuckDB}")
-  upsert_duckdb(table, x, id_col, dt_col, db_file, con)
+  upsert_duckdb(table, x, id_col, dt_col)
   cli::cli_status("{.info Pulling final data from DuckDB}")
-  x <- pull_duckdb(table, db_file, con)
+  x <- pull_duckdb(table)
   cli::cli_status("{.info Writing .csv to OneDrive}")
   od_write(x, file.path(od_folder, paste0(table, ".csv")))
   cli::cli_status_clear()
@@ -228,12 +279,12 @@ upsert_duckdb_od <- function(table, x, id_col, dt_col, db_file = lrh_db(), con =
 #' Upsert into DuckDB AND write .csv locally for Tableau
 #' @export
 #' @rdname upsert_duckdb
-upsert_duckdb_local <- function(table, x, id_col, dt_col, db_file = lrh_db(), con = NULL,
+upsert_duckdb_local <- function(table, x, id_col, dt_col,
                                 loc_folder = lrh_tableau_folder()) {
   cli::cli_status("{.info Updating in DuckDB}")
-  upsert_duckdb(table, x, id_col, dt_col, db_file, con)
+  upsert_duckdb(table, x, id_col, dt_col)
   cli::cli_status(cli::col_yellow("{.info Pulling final data from DuckDB}"))
-  x <- pull_duckdb(table, db_file, con)
+  x <- pull_duckdb(table)
   cli::cli_status(cli::col_yellow("{.info Writing .csv locally}"))
   readr::write_csv(x, file.path(loc_folder, paste0(table, ".csv")))
   cli::cli_status_clear()
@@ -311,7 +362,7 @@ lrh_tableau_folder <- function() {
 }
 
 
-#' Helper function to connect to the LRH DuckDB
+#' Helper function to connect to the LRH DuckDB (now wraps lrh_con())
 #'
 #' @param db_file Location of the DuckDB. Defaults to [lrh_db()]
 #' @param timezone_out Timezone to use for pulling date-time columns
@@ -323,18 +374,8 @@ lrh_tableau_folder <- function() {
 connect_duckdb <- function(db_file = lrh_db(), timezone_out = "America/New_York",
                            tz_out_convert = "with", ...) {
 
-  con <- DBI::dbConnect(duckdb::duckdb(), db_file, , timezone_out = timezone_out,
-                        tz_out_convert = tz_out_convert, ...)
-
-  # Set autoload (for using things like 'today' in patient days view)
-  DBI::dbExecute(con, "SET autoinstall_known_extensions=1;")
-  DBI::dbExecute(con, "SET autoload_known_extensions=1;")
-
-  # Set timezone (for importing) to UTC
-  DBI::dbExecute(con, "SET TimeZone = 'UTC'")
-
-  # return the connection
-  con
+  lrh_con(db_file = db_file, timezone_out = timezone_out,
+          tz_out_convert = tz_out_convert, type = "read_write", ...)
 }
 
 #' Get The time a table as last updated
@@ -345,21 +386,15 @@ connect_duckdb <- function(db_file = lrh_db(), timezone_out = "America/New_York"
 #'
 #' @param table Table name
 #' @param dt_col the date column of the table. If not provided, will search for a column that includes "update_dt_tm".
-#' @param db_file Location of the duckdb file (defaults to [lrh_db()])
-#' @param con (Optional) connection object if you are already connected to the DB.
 #' @param min_dt Generates an error if the last update time is less than this value.
 #'
 #' @md
 #' @returns Prints a cli info statement with the last updated time
 #' @export
-lastupdate_duckdb <- function(table, dt_col = NULL, db_file = lrh_db(), con = NULL) {
+lastupdate_duckdb <- function(table, dt_col = NULL) {
 
-  # Connect to the DuckDB database if connection isn't provided
-  if (is.null(con)) {
-    con <- connect_duckdb(db_file = db_file)
-    # In this case, set up a disconnect when the function ends
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-  }
+  # Connect to the DuckDB database in read_only
+  con <- lrh_con()
 
   # Get the update column if it isn't provided
   if (is.null(dt_col)) {
@@ -386,9 +421,9 @@ lastupdate_duckdb <- function(table, dt_col = NULL, db_file = lrh_db(), con = NU
 
 #' @export
 #' @rdname lastupdate_duckdb
-lastupdate_alert_duckdb <- function(table, dt_col = NULL, db_file = lrh_db(), con = NULL) {
+lastupdate_alert_duckdb <- function(table, dt_col = NULL) {
 
-  m <- lastupdate_duckdb(table, dt_col, db_file, con)
+  m <- lastupdate_duckdb(table, dt_col)
 
   cli::cli_inform(c(
     "i" = "The {.val {table}} table was last updated on {.val {m}}"
@@ -398,8 +433,8 @@ lastupdate_alert_duckdb <- function(table, dt_col = NULL, db_file = lrh_db(), co
 
 #' @rdname lastupdate_duckdb
 #' @export
-lastupdate_min_duckdb <- function(table, min_dt, dt_col = NULL, db_file = lrh_db(), con = NULL) {
-  m <- lastupdate_duckdb(table, dt_col, db_file, con)
+lastupdate_min_duckdb <- function(table, min_dt, dt_col = NULL) {
+  m <- lastupdate_duckdb(table, dt_col)
 
   if (m < min_dt) cli::cli_abort(c(
     "x" = "The {.val {table}} table was last updated on {.val {m}}",

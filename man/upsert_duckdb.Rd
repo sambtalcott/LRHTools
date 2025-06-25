@@ -6,15 +6,13 @@
 \alias{upsert_duckdb_local}
 \title{Upsert in DuckDB}
 \usage{
-upsert_duckdb(table, x, id_col, dt_col, db_file = lrh_db(), con = NULL)
+upsert_duckdb(table, x, id_col, dt_col)
 
 upsert_duckdb_od(
   table,
   x,
   id_col,
   dt_col,
-  db_file = lrh_db(),
-  con = NULL,
   od_folder = "Documents/.database/Tableau Data"
 )
 
@@ -23,8 +21,6 @@ upsert_duckdb_local(
   x,
   id_col,
   dt_col,
-  db_file = lrh_db(),
-  con = NULL,
   loc_folder = lrh_tableau_folder()
 )
 }
@@ -36,10 +32,6 @@ upsert_duckdb_local(
 \item{id_col}{the id column of the table}
 
 \item{dt_col}{the date column of the table}
-
-\item{db_file}{Location of the duckdb file (defaults to \code{\link[=lrh_db]{lrh_db()}})}
-
-\item{con}{(Optional) connection object if you are already connected to the DB.}
 
 \item{od_folder}{The folder to save the .csv file in for \code{upsert_duckdb_od()}}
 

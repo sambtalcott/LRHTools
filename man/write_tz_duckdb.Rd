@@ -4,16 +4,12 @@
 \alias{write_tz_duckdb}
 \title{Write a dataframe to duckdb using TIMESTAMPTZ for date-time fields}
 \usage{
-write_tz_duckdb(table, x, con = NULL, db_file = lrh_db(), overwrite = FALSE)
+write_tz_duckdb(table, x, overwrite = FALSE)
 }
 \arguments{
 \item{table}{Name of table to write to}
 
 \item{x}{dataframe}
-
-\item{con}{(Optional) connection object if you are already connected to the DB.}
-
-\item{db_file}{Location of the duckdb file (defaults to \code{\link[=lrh_db]{lrh_db()}})}
 
 \item{overwrite}{Overwrite a current table (if it exists)?}
 }
