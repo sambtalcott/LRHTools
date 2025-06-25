@@ -8,7 +8,7 @@ lrh_con(
   db_file = lrh_db(),
   timezone_out = "America/New_York",
   tz_out_convert = "with",
-  type = "read_only",
+  type = "any",
   ...
 )
 }
@@ -19,7 +19,8 @@ lrh_con(
 
 \item{tz_out_convert}{"with" or "force"}
 
-\item{type}{Either "read_only" or "read_write". Defaults to "read_only"}
+\item{type}{Either "read_only",  "read_write" or "any". Defaults to "any", which
+will use the current connection if it exists, or create a read-only connection.}
 
 \item{...}{Optional additional arguments}
 }

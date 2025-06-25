@@ -16,25 +16,26 @@
 #' @param timezone_out Timezone to use for pulling date-time columns
 #' @param tz_out_convert "with" or "force"
 #' @param ... Optional additional arguments
-#' @param type Either "read_only" or "read_write". Defaults to "read_only"
+#' @param type Either "read_only",  "read_write" or "any". Defaults to "any", which
+#' will use the current connection if it exists, or create a read-only connection.
 #'
 #' @returns a database connection
 #' @md
 #' @export
 lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
-                    tz_out_convert = "with", type = "read_only", ...) {
+                    tz_out_convert = "with", type = "any", ...) {
 
   # Process type
-  if (type == "read_only") {
+  if (type == "read_only" || type == "any") {
     ro <- TRUE
   } else if (type == "read_write") {
     ro <- FALSE
   } else {
-    cli::cli_abort("{.arg type} must be one of {.val read_only} or {.val read_write}")
+    cli::cli_abort("{.arg type} must be one of {.val read_only}, {.val read_write}, or {.val any}")
   }
 
   # If existing matching connection, return it
-  if (!is.null(.ddb_env$con) && .ddb_env$con_type == type) {
+  if (!is.null(.ddb_env$con) && (.ddb_env$con_type == type || type == "any")) {
     return (.ddb_env$con)
   }
 
@@ -149,7 +150,7 @@ replace_duckdb <- function(x, table, delete_where) {
 pull_duckdb <- function(table, max_rows = Inf) {
 
   # Connect to the DuckDB database in read_only
-  con <- lrh_con()
+  con <- lrh_con(type = "any")
 
   q <- paste0("Select * FROM ", table)
   if (max_rows != Inf) q <- paste0(q, " LIMIT ", max_rows)
