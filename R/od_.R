@@ -6,17 +6,26 @@
 #'
 #' @param shared Name of shared folder (if setting default to a shared folder)
 #' @param od OneDrive object to set as default or use for shared folder
+#' @param folder A folder within the provided OneDrive or shared folder to set as the default.
 #'
 #' @returns Nothing. Sets default
 #' @export
 #' @md
-od_default <- function(shared = NULL, od = NULL) {
+od_default <- function(folder = NULL, shared = NULL, od = NULL) {
   if (!is.null(shared)) {
     .od_env$od <- od_get_shared(name = shared, od = od)
   } else if (!is.null(od)) {
     .od_env$od <- od
   } else {
     .od_env$od <- Microsoft365R::get_business_onedrive()
+  }
+
+  if (!is.null(folder)) {
+    f <- .od_env$od$get_item(folder)
+    if (is.null(f$properties$folder)) {
+      cli::cli_abort("Item {.val {folder}} is not a folder")
+    }
+    .od_env$od <- f
   }
 }
 
@@ -226,6 +235,26 @@ od_upload <- function(src, dest = basename(src), od = NULL) {
   od$upload(src = src, dest = dest)
 
   invisible(dest)
+}
+
+#' Check if a path / item exists in OneDrive.
+#'
+#' @param path Path to check
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#'
+#' @returns TRUE or FALSE
+#' @export
+#' @md
+od_exists <- function(path, od = NULL) {
+
+  if (is.null(od)) od <- od()
+
+  tryCatch({
+    od$get_item(path)
+    TRUE
+  }, error = \(e) {
+    FALSE
+  })
 }
 
 #' Internal function for checking if a OD folder exists
