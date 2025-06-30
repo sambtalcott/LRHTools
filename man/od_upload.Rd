@@ -2,9 +2,12 @@
 % Please edit documentation in R/od_.R
 \name{od_upload}
 \alias{od_upload}
+\alias{od_download}
 \title{OneDrive Upload / Download}
 \usage{
 od_upload(src, dest = basename(src), od = NULL)
+
+od_download(src, dest = basename(src), od = NULL, overwrite = FALSE)
 }
 \arguments{
 \item{src}{Location of source file. Either a local path (for \code{od_upload}), or a Sharepoint path (for \code{od_download})}
@@ -12,6 +15,8 @@ od_upload(src, dest = basename(src), od = NULL)
 \item{dest}{Location of destination file. If not provided, uses the same file name as \code{src}}
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
+
+\item{overwrite}{Should the destination file be overwritten if it exists?}
 }
 \value{
 Returns \code{dest} invisibly

@@ -124,9 +124,72 @@ od_open <- function(path = "", od = NULL) {
   shell.exec(od_get_link(path, od))
 }
 
-#' Save a file to onedrive
+#' Pull extension from a path
 #'
-#' Based off of `tntpr::sp_write()`.
+#' @param path file path
+#' @return The extension as a character vector
+get_ext <- function(path) {
+  ext <- regmatches(path, regexpr("\\..{1,5}$", path))
+  tolower(ext)
+}
+
+#' Determine function type by extension and provided type
+#' Handles type validation
+#'
+#' @param ext File extension (from get_ext)
+#' @param type User-specified type
+#'
+#' @return a type ("dataframe" "rds" or "rdata")
+process_type <- function(ext, type) {
+
+  # Extensions and associated types
+  file_types <- list(
+    ".csv" = "dataframe", ".csv2" = "dataframe", ".tsv" = "dataframe",
+    ".xlsx" = "xlsx",".xls" = "xlsx", ".rds" = "rds"
+  )
+
+  # Determine function by file type
+  if (is.null(type)) {
+
+    type <- do.call(switch, c(ext, file_types, "error"))
+
+    if (type == "error") {
+      cli::cli_abort(c(
+        "x" = "Cannot determine file type",
+        "i" = "Extension {.val {ext}} is not associated with a known read/write function",
+        "i" = "Fix the extension, or manually provide a {.var type} ({.val dataframe}, {.val rds}, or {.val xlsx})",
+        "i" = "Known extensions are {.val {names(file_types)}}"
+      ))
+    }
+  } else if (!type %in% file_types) {
+    cli::cli_abort(c(
+      "x" = "Invalid {.var type} {.val {type}}",
+      "i" = "Valid read types are {.val {as.character(unique(file_types))}}"
+    ))
+  }
+  type
+}
+
+#' Read/Write from OneDrive
+#'
+#' @description
+#' Based off of [tntpr::sp_read()] and [tntpr::sp_write()].
+#'
+#' Read or write data to/from a OneDrive Folder. Can be used with default
+#' folder/drive set by [od_default()] or with a specified folder/drive.
+#'
+#' Currently supported file types include: `.csv`, `.csv2`, `.tsv`, `.xls`,
+#' `.xlsx`, `.rds`
+#'
+#' These functions will attempt to use the appropriate read/write function based
+#' on the file extension, however this can be overridden by specifying type.
+#'
+#' The `...` parameter is passed on to the appropriate reading or writing
+#' function. See the details section for more information on these functions
+#' by type.
+#'
+#' If the folder in `path` does not yet exist, the user will be prompted if they
+#' would like to create it.
 #'
 #' @details
 #' # Details
@@ -151,20 +214,74 @@ od_open <- function(path = "", od = NULL) {
 #' installed) and then uploaded using the `$upload_file()` method.
 #'
 #' @param x file to save
-#' @param path path to save to
+#' @param path The location in the Sharepoint drive
 #' @param od OneDrive (if null, will use the stored OneDrive)
-#' @param ... Additional parameters to pass on to the reading/writing function.
-#'            See details below.
+#' @param type Optional. One of "dataframe" (for delimited files), "xlsx", or "rds". Uses the file extension to determine type if not provided.
+#' @param ... Additional arguments passed on to the reading/writing function.
 #'
-#' @returns x, invisibly
+#' @seealso [od_upload()], [od_download()]; `$upload_file()`, `$download_file()`, `$save_rdata()`, `$load_rdata()` from [Microsoft365R::ms_drive]
+#'
+#' @return `od_read()` returns an R object as specified by type. `od_write()`
+#' returns x, invisibly
+#'
 #' @export
 #' @md
+od_read <- function(path, od = NULL, type = NULL, ...) {
+
+  if (is.null(od)) od <- od()
+
+  ext <- get_ext(path)
+  type <- process_type(ext, type)
+
+  # General error handling.
+  if (!od_exists(path)) {
+    cli::cli_abort(c(
+      "x" = "File {.val {path}} does not exist in the current OneDrive"
+    ))
+  }
+
+  if (type == "rds") {
+    od$load_rds(path = path)
+  } else if (type == "dataframe") {
+    od$load_dataframe(path = path, ...)
+  } else if (type == "xlsx") {
+    od_read_xlsx(path, od, ...) # Error catching in this function
+  }
+
+}
+
+#' Internal function for reading excel files from OneDrive
+#'
+#' @param path path
+#' @param od OneDrive object or folder object
+#' @param ... additional arguments from od_read()
+#'
+#' @return data read by readxl::read_excel()
+od_read_xlsx <- function(path, od, ...) {
+  if (rlang::is_installed("readxl")) {
+    ext <- get_ext(path)
+    tf <- tempfile(fileext = ext)
+
+    od_download(src = path, dest = tf, od = od)
+    on.exit(file.remove(tf)) # Error-safe cleanup
+
+    readxl::read_excel(tf, ...)
+  } else {
+    cli::cli_abort(c(
+      "x" = "Package `readxl` required to read .xls/.xlsx files",
+      "i" = "Run {.code install.packages('readxl')} to install"
+    ))
+  }
+}
+
+#' @export
+#' @rdname od_read
 od_write <- function(x, path, od = NULL, ...) {
 
   if (is.null(od)) od <- od()
 
-  ext <- tntpr:::get_ext(path)
-  type <- tntpr:::process_type(ext, type = NULL)
+  ext <- get_ext(path)
+  type <- process_type(ext, type = NULL)
 
   args <- rlang::list2(...)
 
@@ -215,6 +332,7 @@ od_write_xlsx <- function(x, path, od, ...) {
 #' @param src Location of source file. Either a local path (for `od_upload`), or a Sharepoint path (for `od_download`)
 #' @param dest Location of destination file. If not provided, uses the same file name as `src`
 #' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param overwrite Should the destination file be overwritten if it exists?
 #'
 #' @returns Returns `dest` invisibly
 #' @export
@@ -235,6 +353,31 @@ od_upload <- function(src, dest = basename(src), od = NULL) {
   od_check_folder(od, folder_path = dirname(dest))
 
   od$upload(src = src, dest = dest)
+
+  invisible(dest)
+}
+
+#' @export
+#' @rdname od_upload
+od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE) {
+
+  if (is.null(od)) od <- od()
+
+  # Check for existing destination file
+  if (file.exists(dest) && !overwrite) {
+    cli::cli_abort(c(
+      "x" = "Destination path {.val {dest}} exists, and {.var overwrite} is set to {.val FALSE}"
+    ))
+  }
+
+  # Check for existing source file
+  if (!od_exists(src)) {
+    cli::cli_abort(c(
+      "x" = "File {.val {path}} does not exist in the current OneDrive"
+    ))
+  }
+
+  od$download_file(src = src, dest = dest, overwrite = overwrite)
 
   invisible(dest)
 }

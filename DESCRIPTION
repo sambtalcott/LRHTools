@@ -35,6 +35,7 @@ Imports:
 RoxygenNote: 7.3.2
 Suggests: 
     ggplot2,
+    readxl,
     testthat (>= 3.0.0),
     writexl
 Config/testthat/edition: 3
