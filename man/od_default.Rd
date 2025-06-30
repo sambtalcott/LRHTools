@@ -14,7 +14,7 @@ od_default(folder = NULL, shared = NULL, od = NULL)
 \item{od}{OneDrive object to set as default or use for shared folder}
 }
 \value{
-Nothing. Sets default
+the OneDrive object (invisibly)
 }
 \description{
 Set default onedrive for od_* functions

@@ -8,7 +8,7 @@
 #' @param od OneDrive object to set as default or use for shared folder
 #' @param folder A folder within the provided OneDrive or shared folder to set as the default.
 #'
-#' @returns Nothing. Sets default
+#' @returns the OneDrive object (invisibly)
 #' @export
 #' @md
 od_default <- function(folder = NULL, shared = NULL, od = NULL) {
@@ -27,6 +27,8 @@ od_default <- function(folder = NULL, shared = NULL, od = NULL) {
     }
     .od_env$od <- f
   }
+
+  invisible(.od_env$od)
 }
 
 #' Get stored OneDrive object. If none is stored, calls od_default() to create
