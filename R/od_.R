@@ -234,7 +234,7 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
   type <- process_type(ext, type)
 
   # General error handling.
-  if (!od_exists(path)) {
+  if (!od_exists(path, od = od)) {
     cli::cli_abort(c(
       "x" = "File {.val {path}} does not exist in the current OneDrive"
     ))
@@ -371,7 +371,7 @@ od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE)
   }
 
   # Check for existing source file
-  if (!od_exists(src)) {
+  if (!od_exists(src, od = od)) {
     cli::cli_abort(c(
       "x" = "File {.val {path}} does not exist in the current OneDrive"
     ))
