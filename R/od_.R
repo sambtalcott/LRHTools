@@ -377,7 +377,7 @@ od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE)
     ))
   }
 
-  od$download_file(src = src, dest = dest, overwrite = overwrite)
+  od$get_item(src)$download(dest = dest, overwrite = overwrite)
 
   invisible(dest)
 }
