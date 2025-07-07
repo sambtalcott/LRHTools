@@ -145,8 +145,11 @@ process_type <- function(ext, type) {
   # Extensions and associated types
   file_types <- list(
     ".csv" = "dataframe", ".csv2" = "dataframe", ".tsv" = "dataframe",
-    ".xlsx" = "xlsx",".xls" = "xlsx", ".rds" = "rds"
+    ".xlsx" = "xlsx",".xls" = "xlsx", ".rds" = "rds",
+    ".txt" = "lines", ".html" = "lines"
   )
+
+  possible_types <- unique(unlist(file_types))
 
   # Determine function by file type
   if (is.null(type)) {
@@ -157,7 +160,7 @@ process_type <- function(ext, type) {
       cli::cli_abort(c(
         "x" = "Cannot determine file type",
         "i" = "Extension {.val {ext}} is not associated with a known read/write function",
-        "i" = "Fix the extension, or manually provide a {.var type} ({.val dataframe}, {.val rds}, or {.val xlsx})",
+        "i" = "Fix the extension, or manually provide a {.var type}. Known types are {.val {possible_types}}",
         "i" = "Known extensions are {.val {names(file_types)}}"
       ))
     }
@@ -179,7 +182,7 @@ process_type <- function(ext, type) {
 #' folder/drive set by [od_default()] or with a specified folder/drive.
 #'
 #' Currently supported file types include: `.csv`, `.csv2`, `.tsv`, `.xls`,
-#' `.xlsx`, `.rds`
+#' `.xlsx`, `.rds`, `.txt`, `.html`
 #'
 #' These functions will attempt to use the appropriate read/write function based
 #' on the file extension, however this can be overridden by specifying type.
@@ -202,7 +205,10 @@ process_type <- function(ext, type) {
 #' arguments.
 #' *  ".xls" and ".xlsx" are read using [`readxl::read_excel()`] (if installed).
 #' The function will download the excel file temporarily, then import it and
-#' delete the temporary copy
+#' delete the temporary copy.
+#' *  ".txt" and ".html" are read using [`readr::read_lines()`] (if installed).
+#' The function will download the file temporarily, then import it and delete
+#' the temporary copy.
 #'
 #' ## Writing Functions
 #' *  ".csv", ".csv2", ".tsv" are written using the `$save_dataframe()` method
@@ -246,6 +252,8 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
     od$load_dataframe(path = path, ...)
   } else if (type == "xlsx") {
     od_read_xlsx(path, od, ...) # Error catching in this function
+  } else if (type == "lines") {
+    od_read_lines(path, od, ...)
   }
 
 }
@@ -270,6 +278,30 @@ od_read_xlsx <- function(path, od, ...) {
     cli::cli_abort(c(
       "x" = "Package `readxl` required to read .xls/.xlsx files",
       "i" = "Run {.code install.packages('readxl')} to install"
+    ))
+  }
+}
+
+#' Internal function for reading text files from OneDrive
+#'
+#' @param path path
+#' @param od OneDrive object or folder object
+#' @param ... additional arguments from od_read()
+#'
+#' @return data read by readr::read_lines()
+od_read_lines <- function(path, od, ...) {
+  if (rlang::is_installed("readr")) {
+    ext <- get_ext(path)
+    tf <- tempfile(fileext = ext)
+
+    od_download(src = path, dest = tf, od = od)
+    on.exit(file.remove(tf)) # Error-safe cleanup
+
+    readr::read_lines(tf, ...)
+  } else {
+    cli::cli_abort(c(
+      "x" = "Package `readr` required to read text files",
+      "i" = "Run {.code install.packages('readr')} to install"
     ))
   }
 }

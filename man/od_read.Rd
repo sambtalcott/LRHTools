@@ -31,7 +31,7 @@ Read or write data to/from a OneDrive Folder. Can be used with default
 folder/drive set by \code{\link[=od_default]{od_default()}} or with a specified folder/drive.
 
 Currently supported file types include: \code{.csv}, \code{.csv2}, \code{.tsv}, \code{.xls},
-\code{.xlsx}, \code{.rds}
+\code{.xlsx}, \code{.rds}, \code{.txt}, \code{.html}
 
 These functions will attempt to use the appropriate read/write function based
 on the file extension, however this can be overridden by specifying type.
@@ -54,7 +54,10 @@ which uses \code{\link[readr:read_delim]{readr::read_delim()}}.
 arguments.
 \item ".xls" and ".xlsx" are read using \code{\link[readxl:read_excel]{readxl::read_excel()}} (if installed).
 The function will download the excel file temporarily, then import it and
-delete the temporary copy
+delete the temporary copy.
+\item ".txt" and ".html" are read using \code{\link[readr:read_lines]{readr::read_lines()}} (if installed).
+The function will download the file temporarily, then import it and delete
+the temporary copy.
 }
 }
 
