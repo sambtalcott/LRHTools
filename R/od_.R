@@ -345,8 +345,13 @@ od_write <- function(x, path, od = NULL, ...) {
 #' @returns nothing
 od_write_xlsx <- function(x, path, od, ...) {
   if (rlang::is_installed("writexl")) {
-    tf <- tempfile(fileext = "xlsx")
-    writexl::write_xlsx(x = x, path = tf, ...)
+    tf <- tempfile(fileext = ".xlsx")
+    # For openxlsx2 objects
+    if (inherits(x, "wbWorkbook")) {
+      x$save(file = tf, ...)
+    } else {
+      writexl::write_xlsx(x = x, path = tf, ...)
+    }
     on.exit(file.remove(tf)) # Error-safe cleanup
     suppressMessages( # To block the cli_inform() with the tempfile
       od_upload(src = tf, dest = path, od = od)
@@ -384,7 +389,16 @@ od_upload <- function(src, dest = basename(src), od = NULL) {
   # Check for existing folder in Sharepoint
   od_check_folder(od, folder_path = dirname(dest))
 
-  od$upload(src = src, dest = dest)
+  if (inherits(od, "ms_drive")) {
+    od$upload_file(src = src, dest = dest)
+  } else if (inherits(od, "ms_drive_item")) {
+    od$upload(src = src, dest = dest)
+  } else {
+    cli::cli_abort(c(
+      "x" = "Current OneDrive object not recognized",
+      "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
+    ))
+  }
 
   invisible(dest)
 }
