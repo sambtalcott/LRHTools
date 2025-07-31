@@ -40,13 +40,16 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
 #' @param open open the file after writing? By default, opens tempfiles but not
 #' other files
 #' @param na what NA values are written as
+#' @param return_wb Should this return the openxlsx2 workbook object? If FALSE
+#' returns the path instead.
 #'
 #' @returns the path, invisibly
 #' @export
 #'
 #' @md
 lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
-                      wrap = TRUE, file = NULL, open = is.null(file), na = "") {
+                      wrap = TRUE, file = NULL, open = is.null(file), na = "",
+                      return_wb = FALSE) {
 
   force(open)
   # Get x to be a list of dataframes (if only a single dataframe was provided)
@@ -89,5 +92,5 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
 
   if (open) shell.exec(file)
 
-  invisible(file)
+  if (return_wb) invisible(wb) else invisible(file)
 }

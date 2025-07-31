@@ -11,7 +11,8 @@ lrh_excel(
   wrap = TRUE,
   file = NULL,
   open = is.null(file),
-  na = ""
+  na = "",
+  return_wb = FALSE
 )
 }
 \arguments{
@@ -29,6 +30,9 @@ lrh_excel(
 other files}
 
 \item{na}{what NA values are written as}
+
+\item{return_wb}{Should this return the openxlsx2 workbook object? If FALSE
+returns the path instead.}
 }
 \value{
 the path, invisibly
