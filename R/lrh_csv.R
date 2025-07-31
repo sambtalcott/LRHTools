@@ -35,6 +35,7 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
 #' @param x a dataframe or list of dataframes
 #' @param widths column widths (default: auto)
 #' @param table_style Excel table style (default: gray/striped)
+#' @param wrap Should columns be word-wrapped? (default: TRUE)
 #' @param file path to write to (defaults to tempfile)
 #' @param open open the file after writing? By default, opens tempfiles but not
 #' other files
@@ -45,7 +46,7 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
 #'
 #' @md
 lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
-                      file = NULL, open = is.null(file), na = "") {
+                      wrap = TRUE, file = NULL, open = is.null(file), na = "") {
 
   force(open)
   # Get x to be a list of dataframes (if only a single dataframe was provided)
@@ -56,10 +57,30 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
   wb <- openxlsx2::wb_workbook()
 
   purrr::iwalk(x, \(df, nm) {
-    wb$
-      add_worksheet(nm)$
+    wb$add_worksheet(nm)$
       add_data_table(x = df, table_style = table_style, na.strings = na)$
-      set_col_widths(cols = 1:ncol(df), widths = "auto")
+      set_col_widths(cols = 1:ncol(df), widths = widths)
+
+    if (wrap) {
+      if (isTRUE(widths == "auto")) {
+        # Estimate new col widths
+        col_widths <- df |>
+          purrr::keep(~any(grepl("\n", .x))) |> # Only columns with a line break
+          purrr::imap(\(vec, name) { # Get maximum width
+            stringr::str_split(vec, "\n") |> unlist() |>
+              c(name) |> sapply(stringr::str_length) |> max()
+          })
+
+        # Apply new col widths
+        purrr::iwalk(col_widths, \(w, col) {
+          wb$set_col_widths(cols = which(names(df) == col), widths = w)
+        })
+      }
+
+      # Wrap cells
+      wb$add_cell_style(dims = openxlsx2::wb_dims(x = df), wrap_text = TRUE)
+
+    }
   })
 
   if (is.null(file)) file <- tempfile(fileext = ".xlsx")

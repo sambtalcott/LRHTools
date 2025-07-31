@@ -8,6 +8,7 @@ lrh_excel(
   x,
   widths = "auto",
   table_style = "TableStyleMedium1",
+  wrap = TRUE,
   file = NULL,
   open = is.null(file),
   na = ""
@@ -19,6 +20,8 @@ lrh_excel(
 \item{widths}{column widths (default: auto)}
 
 \item{table_style}{Excel table style (default: gray/striped)}
+
+\item{wrap}{Should columns be word-wrapped? (default: TRUE)}
 
 \item{file}{path to write to (defaults to tempfile)}
 
