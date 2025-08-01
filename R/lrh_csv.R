@@ -71,7 +71,7 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
           purrr::keep(~any(grepl("\n", .x))) |> # Only columns with a line break
           purrr::imap(\(vec, name) { # Get maximum width
             stringr::str_split(vec, "\n") |> unlist() |>
-              c(name) |> sapply(stringr::str_length) |> max()
+              c(name) |> sapply(stringr::str_length) |> max(na.rm = TRUE)
           })
 
         # Apply new col widths
