@@ -16,7 +16,8 @@ lrh_excel(
 )
 }
 \arguments{
-\item{x}{a dataframe or list of dataframes}
+\item{x}{a dataframe or list of dataframes. Lazy tibbles are accepted and will
+be fetched using \code{collect()}}
 
 \item{widths}{column widths (default: auto)}
 

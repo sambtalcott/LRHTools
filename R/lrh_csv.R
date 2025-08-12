@@ -32,7 +32,8 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
 #' By default, writes to a tempfile and opens the file, but can also be used to
 #' write to specified location with the `file` parameter
 #'
-#' @param x a dataframe or list of dataframes
+#' @param x a dataframe or list of dataframes. Lazy tibbles are accepted and will
+#' be fetched using `collect()`
 #' @param widths column widths (default: auto)
 #' @param table_style Excel table style (default: gray/striped)
 #' @param wrap Should columns be word-wrapped? (default: TRUE)
@@ -51,11 +52,17 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
                       wrap = TRUE, file = NULL, open = is.null(file), na = "",
                       return_wb = FALSE) {
 
+  # Evaluate now (before temp file is created)
   force(open)
-  # Get x to be a list of dataframes (if only a single dataframe was provided)
-  if (!is.data.frame(x[[1]])) x <- list(x)
 
+  # Get x to be a list of dataframes (if only a single dataframe was provided)
+  if (!inherits(x, "list")) x <- list(x)
+
+  # Clean names for sheet names
   if (!is.null(names(x))) x <- janitor::clean_names(x)
+
+  # Collect any lazy tables
+  x <- purrr::map(x, dplyr::collect)
 
   wb <- openxlsx2::wb_workbook()
 
