@@ -4,8 +4,8 @@ Title: What the Package Does (Title Case)
 Version: 0.1.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
-      email = "jane@example.com",
+      "Sam", "Talcott",
+      email = "sambtalcott@gmail.com",
       role = c("aut", "cre")
     )
   )
@@ -19,6 +19,7 @@ Imports:
     DBI,
     dplyr,
     duckdb,
+    extrafont,
     httr2,
     janitor,
     keyring,
@@ -31,10 +32,11 @@ Imports:
     rstudioapi,
     stringr,
     tibble,
-    tntpr
+    tntpr,
+    ggplot2,
+    ggtext
 RoxygenNote: 7.3.2
 Suggests: 
-    ggplot2,
     readxl,
     testthat (>= 3.0.0),
     writexl
