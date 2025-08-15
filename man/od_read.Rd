@@ -14,7 +14,9 @@ od_write(x, path, od = NULL, ...)
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
 
-\item{type}{Optional. One of "dataframe" (for delimited files), "xlsx", or "rds". Uses the file extension to determine type if not provided.}
+\item{type}{Optional. One of "dataframe" (for delimited files), "xlsx", or "rds".
+Uses the file extension to determine type if not provided. Can also be "wb"
+to read a .xlsx file as an \code{openxlsx2} workbook object.}
 
 \item{...}{Additional arguments passed on to the reading/writing function.}
 
@@ -52,7 +54,10 @@ on \link[Microsoft365R:ms_drive]{Microsoft365R::ms_drive}.
 which uses \code{\link[readr:read_delim]{readr::read_delim()}}.
 \item ".rds" is read using the \verb{$load_rds()} method which accepts no additional
 arguments.
-\item ".xls" and ".xlsx" are read using \code{\link[readxl:read_excel]{readxl::read_excel()}} (if installed).
+\item ".xls" and ".xlsx" are by default read using \code{\link[readxl:read_excel]{readxl::read_excel()}}.
+The function will download the excel file temporarily, then import it and
+delete the temporary copy.
+\item ".xls" and ".xlsx" with type "wb" are read using \code{\link[openxlsx2:wb_load]{openxlsx2::wb_load()}}.
 The function will download the excel file temporarily, then import it and
 delete the temporary copy.
 \item ".txt" and ".html" are read using \code{\link[readr:read_lines]{readr::read_lines()}} (if installed).

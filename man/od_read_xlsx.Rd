@@ -4,12 +4,14 @@
 \alias{od_read_xlsx}
 \title{Internal function for reading excel files from OneDrive}
 \usage{
-od_read_xlsx(path, od, ...)
+od_read_xlsx(path, od, type, ...)
 }
 \arguments{
 \item{path}{path}
 
 \item{od}{OneDrive object or folder object}
+
+\item{type}{"xlsx" or "wb"}
 
 \item{...}{additional arguments from od_read()}
 }

@@ -146,7 +146,8 @@ process_type <- function(ext, type) {
   file_types <- list(
     ".csv" = "dataframe", ".csv2" = "dataframe", ".tsv" = "dataframe",
     ".xlsx" = "xlsx",".xls" = "xlsx", ".rds" = "rds",
-    ".txt" = "lines", ".html" = "lines"
+    ".txt" = "lines", ".html" = "lines",
+    "wb" = "wb" # Must be manually specified for .xlsx
   )
 
   possible_types <- unique(unlist(file_types))
@@ -203,7 +204,10 @@ process_type <- function(ext, type) {
 #' which uses [`readr::read_delim()`].
 #' *  ".rds" is read using the `$load_rds()` method which accepts no additional
 #' arguments.
-#' *  ".xls" and ".xlsx" are read using [`readxl::read_excel()`] (if installed).
+#' *  ".xls" and ".xlsx" are by default read using [`readxl::read_excel()`].
+#' The function will download the excel file temporarily, then import it and
+#' delete the temporary copy.
+#' *  ".xls" and ".xlsx" with type "wb" are read using [openxlsx2::wb_load()].
 #' The function will download the excel file temporarily, then import it and
 #' delete the temporary copy.
 #' *  ".txt" and ".html" are read using [`readr::read_lines()`] (if installed).
@@ -222,7 +226,9 @@ process_type <- function(ext, type) {
 #' @param x file to save
 #' @param path The location in the Sharepoint drive
 #' @param od OneDrive (if null, will use the stored OneDrive)
-#' @param type Optional. One of "dataframe" (for delimited files), "xlsx", or "rds". Uses the file extension to determine type if not provided.
+#' @param type Optional. One of "dataframe" (for delimited files), "xlsx", or "rds".
+#' Uses the file extension to determine type if not provided. Can also be "wb"
+#' to read a .xlsx file as an `openxlsx2` workbook object.
 #' @param ... Additional arguments passed on to the reading/writing function.
 #'
 #' @seealso [od_upload()], [od_download()]; `$upload_file()`, `$download_file()`, `$save_rdata()`, `$load_rdata()` from [Microsoft365R::ms_drive]
@@ -250,8 +256,8 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
     od$load_rds(path = path)
   } else if (type == "dataframe") {
     od$load_dataframe(path = path, ...)
-  } else if (type == "xlsx") {
-    od_read_xlsx(path, od, ...) # Error catching in this function
+  } else if (type %in% c("xlsx", "wb")) {
+    od_read_xlsx(path, od, type, ...) # Error catching in this function
   } else if (type == "lines") {
     od_read_lines(path, od, ...)
   }
@@ -262,23 +268,29 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
 #'
 #' @param path path
 #' @param od OneDrive object or folder object
+#' @param type "xlsx" or "wb"
 #' @param ... additional arguments from od_read()
 #'
 #' @return data read by readxl::read_excel()
-od_read_xlsx <- function(path, od, ...) {
-  if (rlang::is_installed("readxl")) {
-    ext <- get_ext(path)
-    tf <- tempfile(fileext = ext)
+od_read_xlsx <- function(path, od, type, ...) {
+  ext <- get_ext(path)
 
-    od_download(src = path, dest = tf, od = od)
-    on.exit(file.remove(tf)) # Error-safe cleanup
+  if (!ext %in% c(".xlsx", ".xls")) {
+    cli::cli_abort(
+      "Files must be {.val .xlsx} or {.val .xls} to read as a {.val {type}}",
+      i = "Current file: {.val {path}}"
+    )
+  }
 
+  tf <- tempfile(fileext = ext)
+
+  od_download(src = path, dest = tf, od = od)
+  on.exit(file.remove(tf)) # Error-safe cleanup
+
+  if (type == "xlsx") {
     readxl::read_excel(tf, ...)
-  } else {
-    cli::cli_abort(c(
-      "x" = "Package `readxl` required to read .xls/.xlsx files",
-      "i" = "Run {.code install.packages('readxl')} to install"
-    ))
+  } else if (type == "wb") {
+    openxlsx2::wb_load(tf, ...)
   }
 }
 
