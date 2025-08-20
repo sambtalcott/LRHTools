@@ -94,7 +94,7 @@ append_duckdb <- function(x, table, remove_duplicates = TRUE) {
   existing_tables <- DBI::dbListTables(con)
   if (!(table %in% existing_tables)) {
     # If the table doesn't exist, just write the new data and return
-    DBI::dbWriteTable(con, table, x, append = FALSE)
+    write_tz_duckdb(table, x)
     return(invisible(NULL))
   }
 
