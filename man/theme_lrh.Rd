@@ -4,7 +4,15 @@
 \alias{theme_lrh}
 \title{LRH ggplot2 theme}
 \usage{
-theme_lrh(grid = FALSE, legend_style = "top", md = FALSE, ...)
+theme_lrh(
+  grid = FALSE,
+  legend_style = "top",
+  md = FALSE,
+  base_font = "Open Sans",
+  title_font = "Open Sans SemiCondensed ExtraBold",
+  subtitle_font = "Open Sans SemiCondensed SemiBold",
+  ...
+)
 }
 \arguments{
 \item{grid}{Which grid lines should be shown? Use \code{TRUE} or \code{FALSE} to toggle
@@ -13,6 +21,12 @@ all grid lines, or a string combination of \code{X}, \code{x}, \code{Y}, \code{y
 \item{legend_style}{Either "top" or "right"}
 
 \item{md}{Should text elements use \code{\link[ggtext:element_markdown]{ggtext::element_markdown()}}?}
+
+\item{base_font}{Basic font}
+
+\item{title_font}{Title font}
+
+\item{subtitle_font}{Subtitle font}
 
 \item{...}{Additional arguments passed on to \code{\link[ggplot2:theme]{ggplot2::theme()}}}
 }

@@ -8,17 +8,21 @@
 #' @param legend_style Either "top" or "right"
 #' @param md Should text elements use [ggtext::element_markdown()]?
 #' @param ... Additional arguments passed on to [ggplot2::theme()]
+#' @param base_font Basic font
+#' @param title_font Title font
+#' @param subtitle_font Subtitle font
 #'
 #' @returns a ggplot2 theme statement
 #' @export
 #' @md
-theme_lrh <- function(grid = FALSE, legend_style = "top", md = FALSE, ...) {
-
-  base_font <- "Segoe UI"
+theme_lrh <- function(grid = FALSE, legend_style = "top", md = FALSE,
+                      base_font = "Open Sans",
+                      title_font = "Open Sans SemiCondensed ExtraBold",
+                      subtitle_font = "Open Sans SemiCondensed SemiBold", ...) {
 
   # Load fonts if not already loaded.
   # See tntpr:::get_usable_familiy for a more resilient version of this
-  if (!"Crimson Pro SemiBold" %in% names(grDevices::windowsFonts())) {
+  if (!title_font %in% names(grDevices::windowsFonts())) {
     extrafont::loadfonts(quiet = TRUE)
   }
 
@@ -48,16 +52,16 @@ theme_lrh <- function(grid = FALSE, legend_style = "top", md = FALSE, ...) {
     ggplot2::theme(
       # text = txt(size = 14),
       # Title/subtitle
-      title = txt(family = "Crimson Pro SemiBold"),
-      plot.title = txt(size = 25, family = "Crimson Pro ExtraBold"),
-      plot.subtitle = txt(family = "Crimson Pro", size = 18, face = "plain"),
+      title = txt(family = subtitle_font),
+      plot.title = txt(size = 25, family = title_font),
+      plot.subtitle = txt(family = subtitle_font, size = 18, face = "bold"),
       plot.title.position = "plot",
       # Axis Title
-      axis.title = txt(size = 16),
+      axis.title = txt(size = 16, face = "bold"),
       # Caption
       plot.caption = txt(face = "italic", color = "gray", size = 10),
       # Faceting
-      strip.text = txt(family = "Crimson Pro SemiBold", size = 16),
+      strip.text = txt(family = subtitle_font, size = 16, face = "bold"),
       # Grid
       panel.grid.minor = ggplot2::element_line(color = "#CBCBCB", linewidth = 0.5),
       panel.grid.major = ggplot2::element_line(color = "#CBCBCB", linewidth = 1)
