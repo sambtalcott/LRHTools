@@ -253,9 +253,23 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
   }
 
   if (type == "rds") {
-    od$load_rds(path = path)
+    switch(od_type(od),
+      ms_drive = od$load_rds(path = path),
+      ms_folder = od$get_item(path)$load_rds(),
+      cli::cli_abort(c(
+        "x" = "Current OneDrive object not recognized",
+        "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
+      ))
+    )
   } else if (type == "dataframe") {
-    od$load_dataframe(path = path, ...)
+    switch(od_type(od),
+      ms_drive = od$load_dataframe(path = path, ...),
+      ms_folder = od$get_item(path)$load_dataframe(...),
+      cli::cli_abort(c(
+        "x" = "Current OneDrive object not recognized",
+        "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
+      ))
+    )
   } else if (type %in% c("xlsx", "wb")) {
     od_read_xlsx(path, od, type, ...) # Error catching in this function
   } else if (type == "lines") {
@@ -401,18 +415,38 @@ od_upload <- function(src, dest = basename(src), od = NULL) {
   # Check for existing folder in Sharepoint
   od_check_folder(od, folder_path = dirname(dest))
 
-  if (inherits(od, "ms_drive")) {
-    od$upload_file(src = src, dest = dest)
-  } else if (inherits(od, "ms_drive_item")) {
-    od$upload(src = src, dest = dest)
-  } else {
+  switch(od_type(od),
+    ms_drive = od$upload_file(src = src, dest = dest),
+    ms_folder = od$upload(src = src, dest = dest),
     cli::cli_abort(c(
       "x" = "Current OneDrive object not recognized",
       "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
     ))
-  }
+  )
 
   invisible(dest)
+}
+
+#' What type of onedrive item is this?
+#'
+#' @param x Object to check. Defaults to the current default `od()`
+#'
+#' @returns "ms_drive", "ms_folder", "ms_item" or "unknown"
+#' @export
+#'
+#' @md
+od_type <- function(x = od()) {
+  if (inherits(x, "ms_drive")) {
+    "ms_drive"
+  } else if (inherits(x, "ms_drive_item")) {
+    if (x$is_folder()) {
+      "ms_folder"
+    } else {
+      "ms_item"
+    }
+  } else {
+    "unknown"
+  }
 }
 
 #' @export
