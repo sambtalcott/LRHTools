@@ -4,7 +4,13 @@
 \alias{od_list}
 \title{List OneDrive Items}
 \usage{
-od_list(folder = "", od = NULL, pattern = NULL, full_names = FALSE)
+od_list(
+  folder = "",
+  od = NULL,
+  pattern = NULL,
+  full_names = FALSE,
+  info = "partial"
+)
 }
 \arguments{
 \item{folder}{Path specification}
@@ -14,6 +20,9 @@ od_list(folder = "", od = NULL, pattern = NULL, full_names = FALSE)
 \item{pattern}{Optional pattern to filter on.}
 
 \item{full_names}{Should full names be shown?}
+
+\item{info}{"name", "partial", or "all". "partial" and "all" return data.frames,
+"name" returns a vector of just names}
 }
 \value{
 tibble of folder contents

@@ -81,16 +81,19 @@ od_get_shared <- function(name, od = NULL) {
 #' @param od OneDrive. If NULL, will use the stored or default onedrive
 #' @param pattern Optional pattern to filter on.
 #' @param full_names Should full names be shown?
+#' @param info "name", "partial", or "all". "partial" and "all" return data.frames,
+#' "name" returns a vector of just names
 #'
 #' @returns tibble of folder contents
 #'
 #' @export
 #' @md
-od_list <- function(folder = "", od = NULL, pattern = NULL, full_names = FALSE) {
+od_list <- function(folder = "", od = NULL, pattern = NULL, full_names = FALSE,
+                    info = "partial") {
 
   if (is.null(od)) od <- od()
 
-  items <- od$list_items(path = folder, full_names = full_names) |>
+  items <- od$list_items(path = folder, full_names = full_names, info = info) |>
     tibble::as_tibble()
   if (!is.null(pattern)) {
     items[grepl(pattern, items$name), ]

@@ -7,7 +7,7 @@
 od_type(x = od())
 }
 \arguments{
-\item{x}{}
+\item{x}{Object to check. Defaults to the current default \code{od()}}
 }
 \value{
 "ms_drive", "ms_folder", "ms_item" or "unknown"
