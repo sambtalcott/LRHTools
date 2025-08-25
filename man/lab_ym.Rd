@@ -2,9 +2,12 @@
 % Please edit documentation in R/prep_date.R
 \name{lab_ym}
 \alias{lab_ym}
+\alias{lab_yq}
 \title{Format display months for plots}
 \usage{
 lab_ym(x)
+
+lab_yq(x)
 }
 \arguments{
 \item{x}{A vector of dates or date/times}
@@ -16,4 +19,7 @@ A character vector for displays
 Designed to be used in \code{scale_x_date()} or \code{scale_x_datetime()}. Formats the
 months of the year so that the first displayed month of each year gets a year
 (e.g. "Jan 2024") and following months get only the month ("Feb")
+}
+\details{
+\code{lab_yq()} does the same, but for quarters.
 }

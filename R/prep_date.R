@@ -36,6 +36,8 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 #' months of the year so that the first displayed month of each year gets a year
 #' (e.g. "Jan 2024") and following months get only the month ("Feb")
 #'
+#' `lab_yq()` does the same, but for quarters.
+#'
 #' @param x A vector of dates or date/times
 #'
 #' @returns A character vector for displays
@@ -44,4 +46,11 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 lab_ym <- function(x) {
   dplyr::if_else(x == min(x, na.rm = TRUE) | lubridate::month(x) == 1,
           format(x, "%b\n%Y"), format(x, "%b"))
+}
+
+#' @rdname lab_ym
+lab_yq <- function(x) {
+  x_q <- lubridate::quarter(x)
+  dplyr::if_else(x == min(x, na.rm = TRUE) | x_q == 1,
+                 paste0(x_q, "\n", lubridate::year(x)), x_q)
 }
