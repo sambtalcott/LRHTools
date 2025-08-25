@@ -48,6 +48,7 @@ lab_ym <- function(x) {
           format(x, "%b\n%Y"), format(x, "%b"))
 }
 
+#' @export
 #' @rdname lab_ym
 lab_yq <- function(x) {
   x_q <- lubridate::quarter(x)
