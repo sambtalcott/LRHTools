@@ -51,7 +51,7 @@ lab_ym <- function(x) {
 #' @export
 #' @rdname lab_ym
 lab_yq <- function(x) {
-  x_q <- lubridate::quarter(x)
+  x_q <- paste0("Q", lubridate::quarter(x))
   dplyr::if_else(x == min(x, na.rm = TRUE) | x_q == 1,
                  paste0(x_q, "\n", lubridate::year(x)), x_q)
 }
