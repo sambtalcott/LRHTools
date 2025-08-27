@@ -44,14 +44,33 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 #' @export
 #' @md
 lab_ym <- function(x) {
-  dplyr::if_else(x == min(x, na.rm = TRUE) | lubridate::month(x) == 1,
-          format(x, "%b\n%Y"), format(x, "%b"))
+  data.frame(
+    x = x,
+    year = lubridate::year(x)
+  ) |>
+    dplyr::mutate(
+      lbl = dplyr::if_else(
+        x == min(x, na.rm = TRUE), format(x, "%b\n%Y"), format(x, "%b")
+      ),
+      .by = "year"
+    ) |>
+    dplyr::pull("lbl")
 }
 
 #' @export
 #' @rdname lab_ym
 lab_yq <- function(x) {
   x_q <- paste0("Q", lubridate::quarter(x))
-  dplyr::if_else(x == min(x, na.rm = TRUE) | x_q == 1,
-                 paste0(x_q, "\n", lubridate::year(x)), x_q)
+  data.frame(
+    x = x,
+    year = lubridate::year(x),
+    x_q = x_q
+  ) |>
+    dplyr::mutate(
+      lbl = dplyr::if_else(
+        x == min(x, na.rm = TRUE), paste0(x_q, "\n", lubridate::year(x)), x_q
+      ),
+      .by = "year"
+    ) |>
+    dplyr::pull("lbl")
 }
