@@ -45,15 +45,16 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 #' @md
 lab_ym <- function(x) {
 
-  if (!identical(sort(x), x)) {
+  if (!identical(sort(x[!is.na(x)]), x[!is.na(x)])) {
     cli::cli_abort("`lab_ym()` expects a sorted vector of dates")
   }
 
-  split(x, lubridate::year(x)) |>
-    purrr::map(\(y) {
-      c(format(y[[1]], "%b\n%Y"), format(y[-1], "%b"))
-    }) |>
-    unlist(use.names = FALSE)
+  first_dates <- split(x, lubridate::year(x)) |>
+    purrr::map(1) |>
+    unlist(use.names = FALSE) |>
+    as.Date()
+
+  dplyr::if_else(x %in% first_dates, format(x, "%b\n%Y"), format(x, "%b"))
 
 }
 
@@ -65,11 +66,13 @@ lab_yq <- function(x) {
     cli::cli_abort("`lab_yq()` expects a sorted vector of dates")
   }
 
-  split(x, lubridate::year(x)) |>
-    purrr::map(\(y) {
-      y_q <- paste0("Q", lubridate::quarter(y))
-      c(paste0(y_q[[1]], "\n", lubridate::year(y[[1]])), y_q[-1])
-    }) |>
-    unlist(use.names = FALSE)
+  first_dates <- split(x, lubridate::year(x)) |>
+    purrr::map(1) |>
+    unlist(use.names = FALSE) |>
+    as.Date()
+
+  x_q <- stringr::str_c("Q", lubridate::quarter(x))
+
+  dplyr::if_else(x %in% first_dates, paste0(x_q, "\n", lubridate::year(x)), x_q)
 
 }
