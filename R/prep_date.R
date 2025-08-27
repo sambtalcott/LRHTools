@@ -44,33 +44,32 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 #' @export
 #' @md
 lab_ym <- function(x) {
-  data.frame(
-    x = x,
-    year = lubridate::year(x)
-  ) |>
-    dplyr::mutate(
-      lbl = dplyr::if_else(
-        x == min(x, na.rm = TRUE), format(x, "%b\n%Y"), format(x, "%b")
-      ),
-      .by = "year"
-    ) |>
-    dplyr::pull("lbl")
+
+  if (!identical(sort(x), x)) {
+    cli::cli_abort("`lab_ym()` expects a sorted vector of dates")
+  }
+
+  split(x, lubridate::year(x)) |>
+    purrr::map(\(y) {
+      c(format(y[[1]], "%b\n%Y"), format(y[-1], "%b"))
+    }) |>
+    unlist(use.names = FALSE)
+
 }
 
 #' @export
 #' @rdname lab_ym
 lab_yq <- function(x) {
-  x_q <- paste0("Q", lubridate::quarter(x))
-  data.frame(
-    x = x,
-    year = lubridate::year(x),
-    x_q = x_q
-  ) |>
-    dplyr::mutate(
-      lbl = dplyr::if_else(
-        x == min(x, na.rm = TRUE), paste0(x_q, "\n", lubridate::year(x)), x_q
-      ),
-      .by = "year"
-    ) |>
-    dplyr::pull("lbl")
+
+  if (!identical(sort(x), x)) {
+    cli::cli_abort("`lab_yq()` expects a sorted vector of dates")
+  }
+
+  split(x, lubridate::year(x)) |>
+    purrr::map(\(y) {
+      y_q <- paste0("Q", lubridate::quarter(y))
+      c(paste0(y_q[[1]], "\n", lubridate::year(y[[1]])), y_q[-1])
+    }) |>
+    unlist(use.names = FALSE)
+
 }
