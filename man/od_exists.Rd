@@ -2,9 +2,12 @@
 % Please edit documentation in R/od_.R
 \name{od_exists}
 \alias{od_exists}
-\title{Check if a path / item exists in OneDrive.}
+\alias{od_locked}
+\title{Check if a path / item exists in OneDrive or is locked.}
 \usage{
 od_exists(path, od = NULL)
+
+od_locked(path, od = NULL)
 }
 \arguments{
 \item{path}{Path to check}
@@ -15,5 +18,5 @@ od_exists(path, od = NULL)
 TRUE or FALSE
 }
 \description{
-Check if a path / item exists in OneDrive.
+Check if a path / item exists in OneDrive or is locked.
 }

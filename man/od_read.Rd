@@ -7,7 +7,7 @@
 \usage{
 od_read(path, od = NULL, type = NULL, ...)
 
-od_write(x, path, od = NULL, ...)
+od_write(x, path, od = NULL, on_locked = "prompt", ...)
 }
 \arguments{
 \item{path}{The location in the Sharepoint drive}
@@ -21,10 +21,13 @@ to read a .xlsx file as an \code{openxlsx2} workbook object.}
 \item{...}{Additional arguments passed on to the reading/writing function.}
 
 \item{x}{file to save}
+
+\item{on_locked}{What should \code{od_write()} do if the file you are writing to
+already exists and is locked? One of \code{prompt}, \code{rename}, or \code{error}}
 }
 \value{
 \code{od_read()} returns an R object as specified by type. \code{od_write()}
-returns x, invisibly
+returns the final path, invisibly (useful if using \code{rename})
 }
 \description{
 Based off of \code{\link[tntpr:sp_read]{tntpr::sp_read()}} and \code{\link[tntpr:sp_read]{tntpr::sp_write()}}.

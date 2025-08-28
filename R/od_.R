@@ -232,12 +232,14 @@ process_type <- function(ext, type) {
 #' @param type Optional. One of "dataframe" (for delimited files), "xlsx", or "rds".
 #' Uses the file extension to determine type if not provided. Can also be "wb"
 #' to read a .xlsx file as an `openxlsx2` workbook object.
+#' @param on_locked What should `od_write()` do if the file you are writing to
+#' already exists and is locked? One of `prompt`, `rename`, or `error`
 #' @param ... Additional arguments passed on to the reading/writing function.
 #'
 #' @seealso [od_upload()], [od_download()]; `$upload_file()`, `$download_file()`, `$save_rdata()`, `$load_rdata()` from [Microsoft365R::ms_drive]
 #'
 #' @return `od_read()` returns an R object as specified by type. `od_write()`
-#' returns x, invisibly
+#' returns the final path, invisibly (useful if using `rename`)
 #'
 #' @export
 #' @md
@@ -335,16 +337,53 @@ od_read_lines <- function(path, od, ...) {
   }
 }
 
+
 #' @export
 #' @rdname od_read
-od_write <- function(x, path, od = NULL, ...) {
+od_write <- function(x, path, od = NULL, on_locked = "prompt", ...) {
 
   if (is.null(od)) od <- od()
 
   ext <- get_ext(path)
   type <- process_type(ext, type = NULL)
+  on_locked <- rlang::arg_match(on_locked, c("error", "rename", "prompt"))
 
   args <- rlang::list2(...)
+
+  # Check for lock before writing
+  if (od_locked(path, od)) {
+    switch(on_locked,
+      error = {
+        cli::cli_abort(c(
+          x = "File {.val {path}} is currently locked and cannot be written to",
+          i = "Set {.var on_locked} to {.val rename} to automatically rename or {.val wait} to notify and wait"
+        ))
+      },
+      rename = {
+        # Generate a new unused path
+        new_path <- od_get_backup_name(path, od)
+        # Use the new path and inform
+        cli::cli_inform(c(
+          "!" = "File {.val {path}} is currently locked and cannot be written to",
+          i = "Using file path {.val {new_path}} instead"
+        ))
+        path <- new_path
+      },
+      prompt = {
+        while(od_locked(path, od)) {
+          new_path <- od_get_backup_name(path, od)
+          cli::cli_inform(c(
+            "!" = "File {.val {path}} is currently locked and cannot be written to",
+            i = "Enter {.val rename} to use {.val {new_path}} instead",
+            i = "Press ESCAPE to cancel",
+            i = "Enter anything else to check the file again (close it first...)"
+          ))
+          response <- readline()
+          if (response == "rename") path <- new_path
+        }
+      }
+    )
+  }
 
   if (type == "rds") {
     od$save_rds(object = x, file = path)
@@ -361,10 +400,10 @@ od_write <- function(x, path, od = NULL, ...) {
     od_write_xlsx(x, path, od, ...) # Creates folders -- no error catching needed
   }
 
-  invisible(x)
+  invisible(path)
 }
 
-#' Internal funtion for writing xlsx files
+#' Internal function for writing xlsx files
 #'
 #' @param x item
 #' @param path path
@@ -477,7 +516,7 @@ od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE)
   invisible(dest)
 }
 
-#' Check if a path / item exists in OneDrive.
+#' Check if a path / item exists in OneDrive or is locked.
 #'
 #' @param path Path to check
 #' @param od OneDrive (if null, will use the stored OneDrive)
@@ -496,6 +535,62 @@ od_exists <- function(path, od = NULL) {
     FALSE
   })
 }
+
+#' @export
+#' @rdname od_exists
+od_locked <- function(path, od = NULL) {
+
+  if (is.null(od)) od <- od()
+
+  # If it doesn't exist, return false
+  if (!od_exists(path, od)) return (FALSE)
+
+  item <- od$get_item(path)
+  cur_name <- item$properties$name
+  test_name <- paste0(".test.", cur_name)
+
+  tryCatch({
+    name_changed <- FALSE
+    item$update(name = test_name)
+    name_changed <- TRUE
+    item$update(name = cur_name)
+    FALSE
+  }, error = \(e) {
+    if (name_changed) {
+      cli::cli_abort(c(
+        x = "Item name changed while checking for lock!",
+        i = "Item {.val {path}} was renamed to {.val {test_name}} and then could not be changed back.",
+        i = "This will need to be fixed manually in OneDrive"
+      ))
+    }
+    TRUE
+  })
+}
+
+#' Generate a backup name that doesn't exist
+#'
+#' Appends _1 to the file name (or _2 or _3 if needed)
+#'
+#' @param path path
+#' @param od OneDrive object or folder object
+#'
+#' @returns a new path
+od_get_backup_name <- function(path, od = NULL) {
+
+  if (is.null(od)) od <- od()
+  ext <- get_ext(path)
+
+  # Generate a new unused path
+  i <- 1
+  new_path <- paste0(stringr::str_remove(path, stringr::fixed(ext)), "_", i, ext)
+  while (od_exists(new_path, od)) {
+    i <- i+1
+    new_path <- paste0(stringr::str_remove(path, stringr::fixed(ext)), "_", i, ext)
+  }
+  new_path
+}
+
+
 
 #' Internal function for checking if a OD folder exists
 #'

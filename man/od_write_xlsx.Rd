@@ -2,7 +2,7 @@
 % Please edit documentation in R/od_.R
 \name{od_write_xlsx}
 \alias{od_write_xlsx}
-\title{Internal funtion for writing xlsx files}
+\title{Internal function for writing xlsx files}
 \usage{
 od_write_xlsx(x, path, od, ...)
 }
@@ -19,5 +19,5 @@ od_write_xlsx(x, path, od, ...)
 nothing
 }
 \description{
-Internal funtion for writing xlsx files
+Internal function for writing xlsx files
 }
