@@ -4,7 +4,15 @@
 \alias{lrh_csv}
 \title{LRH CSV writer}
 \usage{
-lrh_csv(x, file, na = "", row.names = FALSE, ...)
+lrh_csv(
+  x,
+  file,
+  na = "",
+  row.names = FALSE,
+  sep = ",",
+  qmethod = "double",
+  ...
+)
 }
 \arguments{
 \item{x}{the object to be written, preferably a matrix or data frame. If not,
@@ -18,13 +26,17 @@ writing. "" indicates output to the console.}
 \item{row.names}{either a logical value indicating whether the row names of x
 are to be written along with x, or a character vector of row names to be written.}
 
-\item{...}{Additional arguments passed on to \code{write.csv()}}
+\item{sep}{Separator. Defaults to ","}
+
+\item{qmethod}{Quote method. Defaults to "double"}
+
+\item{...}{Additional arguments passed on to \code{write.table()}}
 }
 \value{
 \code{x}, invisibly
 }
 \description{
-Wraps \code{write.csv()} with some standard defaults. Unlike \code{readr::write_csv()},
+Wraps \code{\link[=write.table]{write.table()}} with some standard defaults. Unlike \code{readr::write_csv()},
 this function will write date-times in their current timezone (rather than
 translating to UTC).
 }

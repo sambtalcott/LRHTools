@@ -2,7 +2,7 @@
 
 #' LRH CSV writer
 #'
-#' Wraps `write.csv()` with some standard defaults. Unlike `readr::write_csv()`,
+#' Wraps [write.table()] with some standard defaults. Unlike `readr::write_csv()`,
 #' this function will write date-times in their current timezone (rather than
 #' translating to UTC).
 #'
@@ -13,13 +13,17 @@
 #' @param na the string to use for missing values in the data.
 #' @param row.names either a logical value indicating whether the row names of x
 #'   are to be written along with x, or a character vector of row names to be written.
-#' @param ... Additional arguments passed on to `write.csv()`
+#' @param sep Separator. Defaults to ","
+#' @param qmethod Quote method. Defaults to "double"
+#' @param ... Additional arguments passed on to `write.table()`
 #'
 #' @returns `x`, invisibly
 #' @export
 #' @md
-lrh_csv <- function(x, file, na = "", row.names = FALSE, ...) {
-  utils::write.csv(x = x, file = file, na = na, row.names = row.names, ...)
+lrh_csv <- function(x, file, na = "", row.names = FALSE, sep = ",",
+                    qmethod = "double", ...) {
+  utils::write.table(x = x, file = file, na = na, row.names = row.names,
+                     sep = sep, qmethod = qmethod, ...)
   invisible(x)
 }
 
