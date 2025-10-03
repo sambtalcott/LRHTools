@@ -62,7 +62,7 @@ lab_ym <- function(x) {
 #' @rdname lab_ym
 lab_yq <- function(x) {
 
-  if (!identical(sort(x), x)) {
+  if (!identical(sort(x[!is.na(x)]), x[!is.na(x)])) {
     cli::cli_abort("`lab_yq()` expects a sorted vector of dates")
   }
 
