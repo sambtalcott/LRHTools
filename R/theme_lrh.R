@@ -6,6 +6,7 @@
 #' @param grid Which grid lines should be shown? Use `TRUE` or `FALSE` to toggle
 #' all grid lines, or a string combination of `X`, `x`, `Y`, `y` for major and minor x and y grid lines.
 #' @param legend_style Either "top" or "right"
+#' @param border Include a panel border?
 #' @param md Should text elements use [ggtext::element_markdown()]?
 #' @param ... Additional arguments passed on to [ggplot2::theme()]
 #' @param base_font Basic font
@@ -15,7 +16,7 @@
 #' @returns a ggplot2 theme statement
 #' @export
 #' @md
-theme_lrh <- function(grid = FALSE, legend_style = "top", md = FALSE,
+theme_lrh <- function(grid = FALSE, legend_style = "top", border = FALSE, md = FALSE,
                       base_font = "Open Sans",
                       title_font = "Open Sans SemiCondensed ExtraBold",
                       subtitle_font = "Open Sans SemiCondensed SemiBold", ...) {
@@ -88,6 +89,13 @@ theme_lrh <- function(grid = FALSE, legend_style = "top", md = FALSE,
       legend.position = "top",
       legend.justification = "left",
       legend.location = "plot",
+    )
+  }
+
+  # Adjust border
+  if (border) {
+    out <- out + ggplot2::theme(
+      panel.border = ggplot2::element_rect(fill = NA, color = "black")
     )
   }
 

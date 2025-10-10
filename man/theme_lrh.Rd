@@ -7,6 +7,7 @@
 theme_lrh(
   grid = FALSE,
   legend_style = "top",
+  border = FALSE,
   md = FALSE,
   base_font = "Open Sans",
   title_font = "Open Sans SemiCondensed ExtraBold",
@@ -19,6 +20,8 @@ theme_lrh(
 all grid lines, or a string combination of \code{X}, \code{x}, \code{Y}, \code{y} for major and minor x and y grid lines.}
 
 \item{legend_style}{Either "top" or "right"}
+
+\item{border}{Include a panel border?}
 
 \item{md}{Should text elements use \code{\link[ggtext:element_markdown]{ggtext::element_markdown()}}?}
 
