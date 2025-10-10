@@ -21,7 +21,13 @@ od_default <- function(folder = NULL, shared = NULL, od = NULL) {
   }
 
   if (!is.null(folder)) {
-    f <- .od_env$od$get_item(folder)
+    tryCatch(
+      f <- .od_env$od$get_item(folder),
+      error = \(e) cli::cli_abort(c(
+        "x" = "Could not find folder {.val {folder}} in {.val { .od_env$od$properties$name}}",
+        "i" = "Error message: {e$message}"
+      ))
+    )
     if (is.null(f$properties$folder)) {
       cli::cli_abort("Item {.val {folder}} is not a folder")
     }
@@ -57,12 +63,7 @@ od_get_shared <- function(name, od = NULL) {
   }
 
   sh <- od$do_operation("sharedWithMe", options=list(allowexternal="true"))
-
-  if (!is.null(name)) {
-    sh_list <- purrr::keep(sh$value, ~.x$name == name)
-  } else {
-    sh_list <- purrr::keep(sh$value, ~.x$webUrl == webUrl)
-  }
+  sh_list <- purrr::keep(sh$value, ~.x$name == name)
 
   if (length(sh_list) == 0) {
     cli::cli_abort("Shared folder {.val {name}} not found")
