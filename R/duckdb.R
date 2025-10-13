@@ -5,6 +5,28 @@
 # pulls a writeable connection, which is closed/replaced with read-only at the next
 # lrh_con()
 
+
+#' Check if a ddb file is encrypted
+#'
+#' @param db_file File to check
+#'
+#' @returns TRUE or FALSE
+#' @export
+ddb_is_encrypted <- function(db_file) {
+  tryCatch({
+    d <- duckdb::duckdb(dbdir = db_file)
+    duckdb::duckdb_shutdown(d)
+    FALSE
+  }, error = \(e) {
+      if (grepl("without a key", e$message)) {
+        TRUE  # Encrypted
+      } else {
+        stop(e)  # Other error
+      }
+    }
+  )
+}
+
 #' Database Connection Helper
 #'
 #' Returns a connection to the current duckdb database. Stores the driver and
@@ -45,8 +67,8 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
     cli::cli_alert_info("Switching connection to {.val {type}}")
   }
 
-  # Create and save ro connection
-  .ddb_env$drv <- duckdb::duckdb(dbdir = db_file, read_only = ro)
+  # Set up driver and connection
+  .ddb_env$drv <- duckdb::duckdb()
   .ddb_env$con <- DBI::dbConnect(.ddb_env$drv, timezone_out = timezone_out,
                                  tz_out_convert = tz_out_convert, ...)
   .ddb_env$con_type <- type
@@ -58,6 +80,23 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
 
   # Set timezone (for importing) to UTC
   DBI::dbExecute(.ddb_env$con, "SET TimeZone = 'UTC';")
+
+  # Attach database (required to be this way for encrypted databases)
+  attach_extras <- NULL
+  # Encryption details
+  if (ddb_is_encrypted(db_file)) {
+    key <- tntpr::tntp_cred("DUCKDB_KEY") # Has prompting built in
+    DBI::dbExecute(.ddb_env$con, "LOAD httpfs;") # To speed up encryption
+    attach_extras <- paste0("ENCRYPTION_KEY '", key, "'")
+  }
+  # Set read_only
+  if (ro) attach_extras <- c(attach_extras, "READ_ONLY")
+  attach_str <- paste0("ATTACH '", db_file, "' AS db")
+  if (length(attach_extras) > 0) {
+    attach_str <- paste0(attach_str, " (", paste0(attach_extras, collapse = ", "), ")")
+  }
+  DBI::dbExecute(.ddb_env$con, attach_str)
+  DBI::dbExecute(.ddb_env$con, "USE db")
 
   # return the connection
   .ddb_env$con

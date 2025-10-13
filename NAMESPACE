@@ -3,6 +3,7 @@
 export(append_duckdb)
 export(choose_lrh_db)
 export(connect_duckdb)
+export(ddb_is_encrypted)
 export(import_da2)
 export(is_file_locked)
 export(lab_ym)
