@@ -24,7 +24,11 @@ od_default <- function(folder = NULL, shared = NULL, itemid = NULL, od = NULL) {
   if (!is.null(folder) | !is.null(itemid)) {
     f_lbl <- folder %||% paste0("[Item ID]: ", itemid)
     tryCatch(
-      f <- .od_env$od$get_item(path = folder, itemid = itemid),
+      if (!is.null(folder)) {
+        f <- .od_env$od$get_item(path = folder)
+      } else {
+        f <- .od_env$od$get_item(itemid = itemid)
+      },
       error = \(e) cli::cli_abort(c(
         "x" = "Could not find folder {.val {f_lbl}} in {.val { .od_env$od$properties$name}}",
         "i" = "Error message: {e$message}"
