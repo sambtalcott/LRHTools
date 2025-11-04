@@ -4,14 +4,15 @@
 
 #' Set default onedrive for od_* functions
 #'
+#' @param folder A folder within the provided OneDrive or shared folder to set as the default.
+#' @param itemid A specific folder id (instead of a folder name)
 #' @param shared Name of shared folder (if setting default to a shared folder)
 #' @param od OneDrive object to set as default or use for shared folder
-#' @param folder A folder within the provided OneDrive or shared folder to set as the default.
 #'
 #' @returns the OneDrive object (invisibly)
 #' @export
 #' @md
-od_default <- function(folder = NULL, shared = NULL, od = NULL) {
+od_default <- function(folder = NULL, shared = NULL, itemid = NULL, od = NULL) {
   if (!is.null(shared)) {
     .od_env$od <- od_get_shared(name = shared, od = od)
   } else if (!is.null(od)) {
@@ -20,16 +21,17 @@ od_default <- function(folder = NULL, shared = NULL, od = NULL) {
     .od_env$od <- Microsoft365R::get_business_onedrive()
   }
 
-  if (!is.null(folder)) {
+  if (!is.null(folder) | !is.null(itemid)) {
+    f_lbl <- folder %||% paste0("[Item ID]: ", itemid)
     tryCatch(
-      f <- .od_env$od$get_item(folder),
+      f <- .od_env$od$get_item(path = folder, itemid = itemid),
       error = \(e) cli::cli_abort(c(
-        "x" = "Could not find folder {.val {folder}} in {.val { .od_env$od$properties$name}}",
+        "x" = "Could not find folder {.val {f_lbl}} in {.val { .od_env$od$properties$name}}",
         "i" = "Error message: {e$message}"
       ))
     )
-    if (is.null(f$properties$folder)) {
-      cli::cli_abort("Item {.val {folder}} is not a folder")
+    if (is.null(f$properties$folder) && is.null(f$properties$remoteItem$folder)) {
+      cli::cli_abort("Item {.val {f_lbl}} is not a folder")
     }
     .od_env$od <- f
   }

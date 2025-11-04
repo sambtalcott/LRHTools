@@ -4,12 +4,14 @@
 \alias{od_default}
 \title{Set default onedrive for od_* functions}
 \usage{
-od_default(folder = NULL, shared = NULL, od = NULL)
+od_default(folder = NULL, shared = NULL, itemid = NULL, od = NULL)
 }
 \arguments{
 \item{folder}{A folder within the provided OneDrive or shared folder to set as the default.}
 
 \item{shared}{Name of shared folder (if setting default to a shared folder)}
+
+\item{itemid}{A specific folder id (instead of a folder name)}
 
 \item{od}{OneDrive object to set as default or use for shared folder}
 }

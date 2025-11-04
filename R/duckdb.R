@@ -14,8 +14,12 @@
 #' @export
 ddb_is_encrypted <- function(db_file) {
   tryCatch({
-    d <- duckdb::duckdb(dbdir = db_file, read_only = TRUE)
-    duckdb::duckdb_shutdown(d)
+    if (db_file == ":memory:") {
+      FALSE
+    } else {
+      d <- duckdb::duckdb(dbdir = db_file, read_only = TRUE)
+      duckdb::duckdb_shutdown(d)
+    }
     FALSE
   }, error = \(e) {
       if (grepl("without a key", e$message)) {
