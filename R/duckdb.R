@@ -90,7 +90,7 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   # Encryption details
   if (ddb_is_encrypted(db_file)) {
     key <- tntpr::tntp_cred("DUCKDB_KEY") # Has prompting built in
-    DBI::dbExecute(.ddb_env$con, "LOAD httpfs;") # To speed up encryption
+    DBI::dbExecute(.ddb_env$con, "INSTALL httpfs; LOAD httpfs;") # To speed up encryption
     attach_extras <- paste0("ENCRYPTION_KEY '", key, "'")
   }
   # Set read_only
