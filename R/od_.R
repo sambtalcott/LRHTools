@@ -5,6 +5,7 @@
 #' Set default onedrive for od_* functions
 #'
 #' @param folder A folder within the provided OneDrive or shared folder to set as the default.
+#' @param shortcut The name of a folder that has been added as a shortcut to your OneDrive
 #' @param itemid A specific folder id (instead of a folder name)
 #' @param shared Name of shared folder (if setting default to a shared folder)
 #' @param od OneDrive object to set as default or use for shared folder
@@ -12,9 +13,11 @@
 #' @returns the OneDrive object (invisibly)
 #' @export
 #' @md
-od_default <- function(folder = NULL, shared = NULL, itemid = NULL, od = NULL) {
+od_default <- function(folder = NULL, shortcut = NULL, shared = NULL, itemid = NULL, od = NULL) {
   if (!is.null(shared)) {
     .od_env$od <- od_get_shared(name = shared, od = od)
+  } else if (!is.null(shortcut)) {
+    .od_env$od <- od_get_shortcut(name = shortcut, od = od)
   } else if (!is.null(od)) {
     .od_env$od <- od
   } else {
@@ -80,6 +83,37 @@ od_get_shared <- function(name, od = NULL) {
   }
   sh_i <- sh_list[[1]]$remoteItem
   Microsoft365R::ms_drive_item$new(od$token, od$tenant, sh_i)
+}
+
+#' Get an ms_drive_item object for a shortcut folder in your OneDrive
+#'
+#' @param name Name of shortcut folder
+#' @param od ONeDrive object (optional)
+#'
+#' @returns an ms_drive_item object for the shortcut folder
+#' @export
+od_get_shortcut <- function(name, od = NULL) {
+  if (is.null(od)) {
+    od <- Microsoft365R::get_business_onedrive()
+  }
+
+  response <- httr::GET("https://graph.microsoft.com/v1.0/me/drive/root/children",
+                  httr::add_headers(Authorization = paste("Bearer", od$token$credentials$access_token),
+                              Prefer = "Include-Feature=AddToOneDrive"))
+
+  item <- httr::content(response, "parsed")$value |>
+    purrr::keep(~.x$name == name)
+
+  if (length(item) == 0) {
+    cli::cli_abort(c(
+      "x" = "Could not find folder {.val {name}} in your OneDrive",
+      "i" = "To access a shared folder this way, make sure you have added it as a shortcut to your OneDrive"
+    ))
+  } else {
+    item_id <- item[[1]]$id
+    od$get_item(itemid = item_id)
+  }
+
 }
 
 #' List OneDrive Items

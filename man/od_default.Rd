@@ -4,10 +4,18 @@
 \alias{od_default}
 \title{Set default onedrive for od_* functions}
 \usage{
-od_default(folder = NULL, shared = NULL, itemid = NULL, od = NULL)
+od_default(
+  folder = NULL,
+  shortcut = NULL,
+  shared = NULL,
+  itemid = NULL,
+  od = NULL
+)
 }
 \arguments{
 \item{folder}{A folder within the provided OneDrive or shared folder to set as the default.}
+
+\item{shortcut}{The name of a folder that has been added as a shortcut to your OneDrive}
 
 \item{shared}{Name of shared folder (if setting default to a shared folder)}
 
