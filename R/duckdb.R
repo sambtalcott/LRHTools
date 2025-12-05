@@ -71,10 +71,17 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
     cli::cli_alert_info("Switching connection to {.val {type}}")
   }
 
+  # Create temp directory if it doesn't exist
+  temp_dir <- "C:/temp/duckdb_temp"
+  if (!dir.exists(temp_dir)) dir.create(temp_dir, recursive = TRUE)
+
   # Set up driver and connection
-  .ddb_env$drv <- duckdb::duckdb()
-  .ddb_env$con <- DBI::dbConnect(.ddb_env$drv, timezone_out = timezone_out,
-                                 tz_out_convert = tz_out_convert, ...)
+  .ddb_env$drv <- duckdb::duckdb(
+    config = list(memory_limit = "10GB", threads = "4", temp_directory = temp_dir)
+  )
+  .ddb_env$con <- DBI::dbConnect(.ddb_env$drv,
+    timezone_out = timezone_out, tz_out_convert = tz_out_convert, ...
+  )
   .ddb_env$con_type <- type
 
   # General connection setup
