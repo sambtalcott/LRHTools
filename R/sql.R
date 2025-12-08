@@ -34,8 +34,9 @@ sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
 #' @export
 #' @md
 sql_as_date <- function(x, tz = "America/New_York") {
+  col_name <- rlang::enexpr(x)
   dplyr::sql(glue::glue(
-      "CAST({x} AT TIME ZONE '{tz}' AS DATE)"
+      "CAST({col_name} AT TIME ZONE '{tz}' AS DATE)"
   ))
 }
 
@@ -50,15 +51,17 @@ sql_as_date <- function(x, tz = "America/New_York") {
 #' @export
 #' @md
 sql_ce_dt_tm <- function(x, tz = "America/New_York") {
-  dplyr::sql(paste0(
-    "(REGEXP_REPLACE(", x, ", '0:(.{4})(.{2})(.{2})(.{2})(.{2})(.{2}).*', '\\1-\\2-\\3 \\4:\\5:\\6 ') || '", tz, "')::TIMESTAMPTZ"
+  col_name <- rlang::enexpr(x)
+  dplyr::sql(glue::glue(
+    "STRPTIME(SUBSTR({col_name}, 3, 14), '%Y%m%d%H%M%S')::TIMESTAMPTZ AT TIME ZONE '{tz}'"
   ))
 }
 
 #' @rdname sql_ce_dt_tm
 #' @export
 sql_ce_date <- function(x) {
-  dplyr::sql(paste0(
-    "REGEXP_REPLACE(", x, ", '0:(.{4})(.{2})(.{2}).*', '\\1-\\2-\\3')::DATE"
+  col_name <- rlang::enexpr(x)
+  dplyr::sql(glue::glue(
+    "STRPTIME(SUBSTR({col_name}, 3, 8), '%Y%m%d')::DATE"
   ))
 }
