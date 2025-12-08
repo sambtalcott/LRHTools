@@ -38,3 +38,27 @@ sql_as_date <- function(x, tz = "America/New_York") {
       "CAST({x} AT TIME ZONE '{tz}' AS DATE)"
   ))
 }
+
+#' Process DA-2 Date Strings
+#'
+#' These strings take the form of '0:2025112718300000:0.000000:126:0'
+#'
+#' @param x column with date string (ce_result_value)
+#' @param tz Timezone (for date-times)
+#'
+#' @returns a `sql()` CAST statement
+#' @export
+#' @md
+sql_ce_dt_tm <- function(x, tz = "America/New_York") {
+  dplyr::sql(paste0(
+    "(REGEXP_REPLACE(", x, ", '0:(.{4})(.{2})(.{2})(.{2})(.{2})(.{2}).*', '\\1-\\2-\\3 \\4:\\5:\\6 ') || '", tz, "')::TIMESTAMPTZ"
+  ))
+}
+
+#' @rdname sql_ce_dt_tm
+#' @export
+sql_ce_date <- function(x) {
+  dplyr::sql(paste0(
+    "REGEXP_REPLACE(", x, ", '0:(.{4})(.{2})(.{2}).*', '\\1-\\2-\\3')::DATE"
+  ))
+}
