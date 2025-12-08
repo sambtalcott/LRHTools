@@ -53,7 +53,7 @@ sql_as_date <- function(x, tz = "America/New_York") {
 sql_ce_dt_tm <- function(x, tz = "America/New_York") {
   col_name <- rlang::enexpr(x)
   dplyr::sql(glue::glue(
-    "STRPTIME(SUBSTR({col_name}, 3, 14), '%Y%m%d%H%M%S')::TIMESTAMPTZ AT TIME ZONE '{tz}'"
+    "STRPTIME(SUBSTR({col_name}, 3, 14) || '{tz}', '%Y%m%d%H%M%S%Z')"
   ))
 }
 
