@@ -5,12 +5,14 @@
 \alias{od_open}
 \title{Get or open a share link to an item on OneDrive}
 \usage{
-od_get_link(path = "", od = NULL)
+od_get_link(path = "", desktop = TRUE, od = NULL)
 
-od_open(path = "", od = NULL)
+od_open(path = "", desktop = TRUE, od = NULL)
 }
 \arguments{
 \item{path}{The path to get a link to}
+
+\item{desktop}{Should the link be opened in the desktop version of the app?}
 
 \item{od}{OneDrive. If NULL, will use the stored or default onedrive}
 }

@@ -149,23 +149,46 @@ od_list <- function(folder = "", od = NULL, pattern = NULL, full_names = FALSE,
 #' Should work for files or folders.
 #'
 #' @param path The path to get a link to
+#' @param desktop Should the link be opened in the desktop version of the app?
 #' @param od OneDrive. If NULL, will use the stored or default onedrive
 #'
 #' @returns a character of the link
 #' @export
 #' @md
-od_get_link <- function(path = "", od = NULL) {
+od_get_link <- function(path = "", desktop = TRUE, od = NULL) {
 
   if (is.null(od)) od <- od()
 
-  od$get_item(path)$create_share_link()
+  link <- od$get_item(path)$create_share_link()
+
+  if (desktop) {
+    ext <- tolower(get_ext(path))
+    protocol <- switch(ext,
+      ".xlsx" = "ms-excel:ofe|u|",
+      ".xls"  = "ms-excel:ofe|u|",
+      ".xlsm" = "ms-excel:ofe|u|",
+      ".csv"  = "ms-excel:ofe|u|",
+      ".docx" = "ms-word:ofe|u|",
+      ".doc"  = "ms-word:ofe|u|",
+      ".docm" = "ms-word:ofe|u|",
+      ".pptx" = "ms-powerpoint:ofe|u|",
+      ".ppt"  = "ms-powerpoint:ofe|u|",
+      ".pptm" = "ms-powerpoint:ofe|u|",
+      NULL
+    )
+    if (!is.null(protocol)) {
+      link <- paste0(protocol, link)
+    }
+  }
+
+  link
 }
 
 
 #' @export
 #' @rdname od_get_link
-od_open <- function(path = "", od = NULL) {
-  shell.exec(od_get_link(path, od))
+od_open <- function(path = "", desktop = TRUE, od = NULL) {
+  shell.exec(od_get_link(path, desktop = desktop, od = od))
 }
 
 #' Pull extension from a path
