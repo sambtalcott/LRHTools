@@ -260,7 +260,7 @@ write_tz_duckdb <- function(table, x, overwrite = FALSE) {
 upsert_duckdb <- function(table, x, id_col, dt_col) {
 
   # Check that x is unique by primary key (crashes R otherwise)
-  if (!identical(x[[id_col]], unique(x[[id_col]]))) {
+  if (anyDuplicated(x[[id_col]]) > 0) {
     cli::cli_abort(c("x" = "{.var x} contains duplicate values of {.var {id_col}}"))
   }
   if (any(is.na(x[[id_col]]))) {
@@ -287,6 +287,7 @@ upsert_duckdb <- function(table, x, id_col, dt_col) {
     SELECT * FROM {table} WHERE 1 = 2"
   )
   DBI::dbExecute(con, ct)
+  on.exit(try(DBI::dbRemoveTable(con, "stg"), silent = TRUE), add = TRUE)
   DBI::dbAppendTable(con, "stg", x)
 
   # Create UPSERT query
@@ -302,14 +303,8 @@ upsert_duckdb <- function(table, x, id_col, dt_col) {
     WHERE EXCLUDED.{dt_col} > {table}.{dt_col}"
   )
 
-  # Perform UPSERT
-  rows <- DBI::dbExecute(con, iq)
-
-  # Remove staging table
-  DBI::dbRemoveTable(con, "stg")
-
-  # Return rows
-  rows
+  # Perform UPSERT and return rows affected
+  DBI::dbExecute(con, iq)
 }
 
 #' Upsert into DuckDB AND write .csv to OneDrive for Tableau
