@@ -2,6 +2,84 @@
 # Package-specific environment for storing the OneDrive object
 .od_env <- new.env(parent = emptyenv())
 
+#' Maintain Azure Authentication Tokens
+#'
+#' Proactively manages Azure/Microsoft 365 authentication tokens to prevent
+#' authentication errors. Removes tokens older than `max_age_days` (which would
+#' fail to refresh due to conditional access policies) and refreshes tokens
+#' that are still valid to extend their lifetime.
+#'
+#' @param max_age_days Maximum age in days before a token is considered stale
+#'   and should be removed. Default is 6 days (one day before the typical
+#'   7-day conditional access policy limit).
+#' @param verbose If TRUE, prints informational messages about token maintenance.
+#'
+#' @returns Invisibly returns a list with counts of tokens removed and refreshed.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Manually run token maintenance
+#' maintain_azure_tokens()
+#'
+#' # Check status without making changes
+#' maintain_azure_tokens(verbose = TRUE)
+#' }
+#' @md
+maintain_azure_tokens <- function(max_age_days = 6, verbose = TRUE) {
+
+  token_dir <- AzureAuth::AzureR_dir()
+
+  if (!dir.exists(token_dir)) return(invisible(list(removed = 0, refreshed = 0)))
+
+  # Only look at token files (hash filenames), not json config files
+
+  token_files <- list.files(token_dir, pattern = "^[a-f0-9]+$", full.names = TRUE)
+  if (length(token_files) == 0) return(invisible(list(removed = 0, refreshed = 0)))
+
+  file_info <- file.info(token_files)
+  age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
+
+  removed <- 0
+  refreshed <- 0
+
+
+  for (i in seq_along(token_files)) {
+    token_file <- token_files[i]
+    token_age <- age_days[i]
+
+    if (token_age > max_age_days) {
+      # Token is stale - remove it
+      file.remove(token_file)
+      removed <- removed + 1
+    } else {
+      # Token is fresh - try to refresh it to extend its life
+      tryCatch({
+        tok <- readRDS(token_file)
+        if (inherits(tok, "AzureToken") && tok$can_refresh()) {
+          tok$refresh()
+          refreshed <- refreshed + 1
+        }
+      }, error = function(e) {
+        # If refresh fails, the token may be corrupted or expired - remove it
+        file.remove(token_file)
+        removed <<- removed + 1
+      })
+    }
+  }
+
+  if (verbose && (removed > 0 || refreshed > 0)) {
+    if (removed > 0) {
+      cli::cli_alert_info("Removed {removed} stale Azure token{?s}")
+    }
+    if (refreshed > 0) {
+      cli::cli_alert_success("Refreshed {refreshed} Azure token{?s}")
+    }
+  }
+
+  invisible(list(removed = removed, refreshed = refreshed))
+}
+
 #' Set default onedrive for od_* functions
 #'
 #' @param folder A folder within the provided OneDrive or shared folder to set as the default.
