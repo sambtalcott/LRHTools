@@ -62,8 +62,13 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
   # Get x to be a list of dataframes (if only a single dataframe was provided)
   if (!inherits(x, "list")) x <- list(x)
 
-  # Clean names for sheet names
-  if (!is.null(names(x))) x <- janitor::clean_names(x)
+
+  # Make valid sheet names (max 31 chars, no invalid characters)
+  if (!is.null(names(x))) {
+    names(x) <- names(x) |>
+      stringr::str_replace_all("[\\\\/?*\\[\\]:]", "") |>
+      stringr::str_trunc(31, ellipsis = "")
+  }
 
   # Collect any lazy tables
   x <- purrr::map(x, dplyr::collect)
