@@ -1,82 +1,176 @@
-# Package-specific environment for tableau credentials
-.tab_env <- new.env(parent = emptyenv())
 
-#' Authenticate in Tableau
+#' Sign in to Tableau Cloud using Personal Access Token
 #'
-#' Authenticates in tableau and stores the credentials token for use with other
-#' `tableau_*` functions. By default, credentials tokens are valid for 120 minutes
-#' on Tableau Cloud -- if using for longer you will need to reauthorize.
-#'
-#' Defaults are currently set for LRH, but can be adjusted
-#' for any site. For more details see [Tableau's REST Documentation](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_in)
-#'
-#' @param base_url Tableau Base URL
-#' @param site_content_url Site name
-#' @param pat_name PAT Name
-#' @param pat_secret PAT
-#'
-#' @md
-#' @returns nothing
-#' @export
-tableau_auth <- function(base_url = "https://us-east-1.online.tableau.com/api/3.15",
-                         site_content_url = "lrh_nh",
-                         pat_name = "RStudio",
-                         pat_secret = tntpr::tntp_cred("TABLEAU_PAT")) {
+#' @param server Tableau Cloud server URL (e.g., "https://us-east-1.online.tableau.com")
+#' @param site_name The site name (content URL), e.g., "lrh_nh"
+#' @param pat_name Personal Access Token name (or set TABLEAU_PAT_NAME env var)
+#' @param pat_secret Personal Access Token secret (or set TABLEAU_PAT_SECRET env var)
+#' @param api_version Tableau REST API version (default "3.21")
+#' @return List with site_id, auth_token, and api_base_url
+tableau_sign_in <- function(server = "https://us-east-1.online.tableau.com",
+                            site_name = "lrh_nh",
+                            pat_name = "RStudio",
+                            pat_secret = keyring::key_get("TABLEAU_PAT"),
+                            api_version = "3.21") {
 
-  base_req <- httr2::request(base_url) |>
-    httr2::req_headers("Accept" = "application/json")
+  api_base <- paste0(server, "/api/", api_version)
 
-  withCallingHandlers(
-    auth_content <- base_req |>
-      httr2::req_url_path_append("auth", "signin") |>
-      httr2::req_body_json(list(credentials = list(
-        personalAccessTokenName = pat_name,
-        personalAccessTokenSecret = pat_secret,
-        site = list(contentUrl = site_content_url)
-      ))) |>
-      httr2::req_perform() |>
-      httr2::resp_body_json(),
-    httr2_http_401 = function(cnd) {
-      cli::cli_abort(c(
-        "x" = "Tableau Authentication Error:",
-        "Attempted to authenticate with PAT name {.val {pat_name}} and value {.val {paste0(substr(pat_secret, 1, 5), '...')}}",
-        "Check that the provided PAT is correct and still active."
-      ))
-    }
+  # Build sign-in request body
+  body <- list(
+    credentials = list(
+      personalAccessTokenName = pat_name,
+      personalAccessTokenSecret = pat_secret,
+      site = list(contentUrl = site_name)
+    )
   )
 
-  .tab_env$token <- auth_content$credentials$token
-  .tab_env$site_id <- auth_content$credentials$site$id
-  .tab_env$base_req <- base_req |>
-    httr2::req_url_path_append("sites", .tab_env$site_id) |>
-    httr2::req_auth_bearer_token(.tab_env$token)
+  resp <- httr2::request(paste0(api_base, "/auth/signin")) |>
+    httr2::req_body_json(body) |>
+    httr2::req_headers("Accept" = "application/json", "Content-Type" = "application/json") |>
+    httr2::req_perform()
+
+  result <- httr2::resp_body_json(resp)
+
+  list(
+    site_id = result$credentials$site$id,
+    auth_token = result$credentials$token,
+    api_base_url = api_base,
+    user_id = result$credentials$user$id
+  )
 }
 
-#' Check for a stored authentication (internal)
+
+#' Get project ID by name
 #'
-#' @returns nothing
-tableau_has_auth <- function() {
-  if (is.null(.tab_env$base_req)) {
-    cli::cli_abort(c(
-      "x" = "No stored Tableau authentication",
-      "Authenticate first using `tableau_auth()`"
+#' @param auth Authentication list from tableau_sign_in()
+#' @param project_name Name of the project/folder
+#' @return Project ID string
+tableau_get_project_id <- function(auth, project_name) {
+  # Query projects with filter
+  url <- paste0(
+    auth$api_base_url, "/sites/", auth$site_id, "/projects",
+    "?filter=name:eq:", utils::URLencode(project_name, reserved = TRUE)
+  )
+
+  resp <- httr2::request(url) |>
+    httr2::req_headers(
+      "X-Tableau-Auth" = auth$auth_token,
+      "Accept" = "application/json"
+    ) |>
+    httr2::req_perform()
+
+  result <- httr2::resp_body_json(resp)
+
+  if (length(result$projects$project) == 0) {
+    stop(sprintf("Project '%s' not found", project_name))
+  }
+
+  result$projects$project[[1]]$id
+}
+
+
+
+#' Get data source ID by name
+#'
+#' @param auth Authentication list from tableau_sign_in()
+#' @param datasource_name Name of the data source
+#' @param project_name Optional project name to filter by (recommended for disambiguation)
+#' @return Data source ID string
+tableau_get_datasource_id <- function(auth, datasource_name, project_name = NULL) {
+  # Query datasources with filter by name
+  url <- paste0(
+    auth$api_base_url, "/sites/", auth$site_id, "/datasources",
+    "?filter=name:eq:", utils::URLencode(datasource_name, reserved = TRUE)
+  )
+
+  resp <- httr2::request(url) |>
+    httr2::req_headers(
+      "X-Tableau-Auth" = auth$auth_token,
+      "Accept" = "application/json"
+    ) |>
+    httr2::req_perform()
+
+  result <- httr2::resp_body_json(resp)
+
+  if (length(result$datasources$datasource) == 0) {
+    stop(sprintf("Data source '%s' not found", datasource_name))
+  }
+
+  datasources <- result$datasources$datasource
+
+  # If project_name specified, filter to that project
+
+  if (!is.null(project_name)) {
+    project_id <- tableau_get_project_id(auth, project_name)
+    datasources <- Filter(function(ds) ds$project$id == project_id, datasources)
+
+    if (length(datasources) == 0) {
+      stop(sprintf("Data source '%s' not found in project '%s'", datasource_name, project_name))
+    }
+  }
+
+  if (length(datasources) > 1) {
+    warning(sprintf(
+      "Multiple data sources named '%s' found. Using the first one. Consider specifying project_name.",
+      datasource_name
     ))
   }
+
+  datasources[[1]]$id
 }
 
-#' List Tableau Data sources
+
+#' Refresh a data source extract
 #'
-#' @returns a tibble with details on all current Tableau data sources
-#' @export
-tableau_list_data <- function() {
-  tableau_has_auth()
-  a <- .tab_env$base_req |>
-    httr2::req_url_path_append("datasources") |>
-    httr2::req_perform() |>
-    httr2::resp_body_json(simplifyVector = TRUE)
+#' Initiates an extract refresh job for the specified data source on Tableau Cloud.
+#'
+#' @param auth Authentication list from tableau_sign_in()
+#' @param datasource_name Name of the data source to refresh
+#' @param project_name Optional project name to filter by (recommended for disambiguation)
+#' @param datasource_id Optional data source ID (if known, skips lookup by name)
+#' @return List with job information (id, mode, type, createdAt)
+tableau_refresh_datasource <- function(auth,
+                                       datasource_name = NULL,
+                                       project_name = NULL,
+                                       datasource_id = NULL) {
 
-  a$datasources$datasource |>
-    tibble::as_tibble()
+  # Get datasource ID if not provided
+
+  if (is.null(datasource_id)) {
+    if (is.null(datasource_name)) {
+      stop("Either datasource_name or datasource_id must be provided")
+    }
+    datasource_id <- tableau_get_datasource_id(auth, datasource_name, project_name)
+  }
+
+  # Build the refresh URL
+  url <- paste0(
+    auth$api_base_url, "/sites/", auth$site_id,
+    "/datasources/", datasource_id, "/refresh"
+  )
+
+  # Tableau API requires empty tsRequest XML body
+  body_xml <- "<tsRequest />"
+
+  resp <- httr2::request(url) |>
+    httr2::req_headers(
+      "X-Tableau-Auth" = auth$auth_token,
+      "Accept" = "application/json",
+      "Content-Type" = "application/xml"
+    ) |>
+    httr2::req_body_raw(body_xml, type = "application/xml") |>
+    httr2::req_perform()
+
+  result <- httr2::resp_body_json(resp)
+
+  job_info <- list(
+    id = result$job$id,
+    mode = result$job$mode,
+    type = result$job$type,
+    created_at = result$job$createdAt
+  )
+
+  cli::cli_alert_success("Extract refresh initiated for data source (Job ID: {job_info$id})")
+
+  invisible(job_info)
 }
-
-# Could potentially add additional functions if wanted
