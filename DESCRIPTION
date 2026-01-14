@@ -39,7 +39,8 @@ Imports:
     readxl,
     writexl,
     glue,
-    httr
+    httr,
+    officer
 RoxygenNote: 7.3.2
 Suggests: 
     testthat (>= 3.0.0)
