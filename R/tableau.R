@@ -6,6 +6,7 @@
 #' @param pat_name Personal Access Token name (or set TABLEAU_PAT_NAME env var)
 #' @param pat_secret Personal Access Token secret (or set TABLEAU_PAT_SECRET env var)
 #' @param api_version Tableau REST API version (default "3.21")
+#' @export
 #' @return List with site_id, auth_token, and api_base_url
 tableau_sign_in <- function(server = "https://us-east-1.online.tableau.com",
                             site_name = "lrh_nh",
@@ -44,6 +45,7 @@ tableau_sign_in <- function(server = "https://us-east-1.online.tableau.com",
 #'
 #' @param auth Authentication list from tableau_sign_in()
 #' @param project_name Name of the project/folder
+#' @export
 #' @return Project ID string
 tableau_get_project_id <- function(auth, project_name) {
   # Query projects with filter
@@ -75,6 +77,7 @@ tableau_get_project_id <- function(auth, project_name) {
 #' @param auth Authentication list from tableau_sign_in()
 #' @param datasource_name Name of the data source
 #' @param project_name Optional project name to filter by (recommended for disambiguation)
+#' @export
 #' @return Data source ID string
 tableau_get_datasource_id <- function(auth, datasource_name, project_name = NULL) {
   # Query datasources with filter by name
@@ -128,6 +131,7 @@ tableau_get_datasource_id <- function(auth, datasource_name, project_name = NULL
 #' @param datasource_name Name of the data source to refresh
 #' @param project_name Optional project name to filter by (recommended for disambiguation)
 #' @param datasource_id Optional data source ID (if known, skips lookup by name)
+#' @export
 #' @return List with job information (id, mode, type, createdAt)
 tableau_refresh_datasource <- function(auth,
                                        datasource_name = NULL,
