@@ -57,3 +57,53 @@ ppt_d2 <- function(p, left, right) {
     officer::ph_with(left, officer::ph_location_id(3)) |>
     officer::ph_with(right, officer::ph_location_id(4))
 }
+
+
+#' For adding gt tables to slides
+#'
+#' Uses chrome to print the table to an image, then adds it using
+#' [officer::ph_with.external_img()]. By default, makes the table as large as
+#' possible for the location without changing its scale and centers it.
+#'
+#' @param x an rpptx object
+#' @param value gt() object
+#' @param location location. See [officer::ph_with()]
+#' @param ... Additional arguments passed on to external image ph_with()
+#'
+#' @returns x
+#' @export
+ph_with.gt_tbl <- function(x, value, location, ...) {
+
+  loc_dim <- officer::fortify_location(location, x)
+  loc_hw <- loc_dim$height/loc_dim$width
+
+  tf <- tempfile(fileext = ".png")
+  gt::gtsave(value, tf)
+
+  gt_dim <- magick::image_read(tf) |>
+    magick::image_data() |>
+    attr("dim") |>
+    _[-1] |>
+    as.list() |>
+    rlang::set_names(c("width", "height"))
+  gt_hw <- gt_dim$height/gt_dim$width
+
+  # Determine final dimensions
+  if (gt_hw > loc_hw) {
+    final_h <- loc_dim$height
+    final_w <- final_h / gt_hw
+    final_t <- loc_dim$top
+    final_l <- loc_dim$left + (loc_dim$width - final_w)/2
+  } else {
+    final_w <- loc_dim$width
+    final_h <- final_w * gt_hw
+    final_l <- loc_dim$left
+    final_t <- loc_dim$top + (loc_dim$height - final_h)/2
+  }
+  new_loc <- officer::ph_location(
+    left = final_l, top = final_t,
+    height = final_h, width = final_w
+  )
+
+  officer::ph_with(x, officer::external_img(tf), new_loc)
+}
