@@ -4,7 +4,7 @@
 \alias{ph_with.gt_tbl}
 \title{For adding gt tables to slides}
 \usage{
-ph_with.gt_tbl(x, value, location, ...)
+\method{ph_with}{gt_tbl}(x, value, location, ...)
 }
 \arguments{
 \item{x}{an rpptx object}

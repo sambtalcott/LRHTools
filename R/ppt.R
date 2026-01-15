@@ -70,6 +70,9 @@ ppt_d2 <- function(p, left, right) {
 #' @param location location. See [officer::ph_with()]
 #' @param ... Additional arguments passed on to external image ph_with()
 #'
+#' @method ph_with gt_tbl
+#' @importFrom officer ph_with
+#'
 #' @returns x
 #' @export
 ph_with.gt_tbl <- function(x, value, location, ...) {
