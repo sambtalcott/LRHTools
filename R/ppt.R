@@ -81,7 +81,7 @@ ph_with.gt_tbl <- function(x, value, location, ...) {
   loc_hw <- loc_dim$height/loc_dim$width
 
   tf <- tempfile(fileext = ".png")
-  gt::gtsave(value, tf)
+  gt::gtsave(value, tf) |> suppressMessages()
 
   gt_dim <- magick::image_read(tf) |>
     magick::image_data() |>
