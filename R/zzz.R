@@ -11,4 +11,7 @@
       # (e.g., if AzureAuth is not fully available)
     }
   )
+
+  register_lrh_fonts()
+  cli::cli_alert_success("Registered theme_lrh() fonts")
 }

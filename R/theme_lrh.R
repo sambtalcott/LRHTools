@@ -105,3 +105,27 @@ theme_lrh <- function(grid = FALSE, legend_style = "top", border = FALSE, md = F
   # Return theme
   out
 }
+
+#' Register fonts with system fonts
+#'
+#' Needed for using [officer::ph_with()] with ggplot objects. Runs on package
+#' load automatically.
+#'
+#' @param fonts defaults to LRH theme fonts
+#'
+#' @returns Nothing
+#' @export
+#'
+#' @md
+register_lrh_fonts <- function(fonts = c(
+  "Open Sans SemiCondensed ExtraBold",
+  "Open Sans SemiCondensed SemiBold"
+)) {
+  font_files <- extrafont::fonttable() |>
+    dplyr::filter(FullName %in% fonts) |>
+    dplyr::select(FullName, fontfile)
+
+  purrr::pwalk(font_files, function(FullName, fontfile) {
+    systemfonts::register_font(name = FullName, plain = fontfile)
+  })
+}
