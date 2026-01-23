@@ -13,5 +13,5 @@
   )
 
   register_lrh_fonts()
-  cli::cli_alert_success("Registered theme_lrh() fonts")
+  packageStartupMessage("Registered theme_lrh() fonts")
 }

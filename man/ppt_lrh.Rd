@@ -18,8 +18,8 @@ ppt_lrh(
 \item{template_loc}{Location of PPT Template}
 }
 \value{
-a rpptx object from \link{officer}
+a rpptx object from \link[officer:officer]{officer::officer}
 }
 \description{
-Extends \link{officer} to create a new LRH Data PPT Slide with a title and subtitle
+Extends \link[officer:officer]{officer::officer} to create a new LRH Data PPT Slide with a title and subtitle
 }
