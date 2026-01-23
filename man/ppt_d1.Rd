@@ -4,12 +4,14 @@
 \alias{ppt_d1}
 \title{Add a single data slide}
 \usage{
-ppt_d1(p, content)
+ppt_d1(p, content, notes = NULL)
 }
 \arguments{
 \item{p}{rpptx object (from \code{\link[=ppt_lrh]{ppt_lrh()}})}
 
 \item{content}{content to add to center}
+
+\item{notes}{optional speaker notes for the slide}
 }
 \value{
 rpptx object

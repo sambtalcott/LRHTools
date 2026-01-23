@@ -4,7 +4,7 @@
 \alias{ppt_d2}
 \title{Add a double data slide}
 \usage{
-ppt_d2(p, left, right)
+ppt_d2(p, left, right, notes = NULL)
 }
 \arguments{
 \item{p}{rpptx object (from \code{\link[=ppt_lrh]{ppt_lrh()}})}
@@ -12,6 +12,8 @@ ppt_d2(p, left, right)
 \item{left}{content to add to left pane}
 
 \item{right}{content to add to right pane}
+
+\item{notes}{optional speaker notes for the slide}
 }
 \value{
 rpptx object
