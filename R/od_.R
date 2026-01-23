@@ -280,34 +280,6 @@ od_open <- function(path = "", desktop = TRUE, type = "existing", od = NULL) {
   shell.exec(od_get_link(path, desktop = desktop, type = type, od = od))
 }
 
-#' Get link-based permission IDs for a OneDrive item
-#'
-#' Returns the permission IDs for any sharing links associated with the item.
-#' These IDs can be used with [od_delete_permission()] to remove the links.
-#'
-#' @param path The path to the item
-#' @param od OneDrive. If NULL, will use the stored or default onedrive
-#'
-#' @returns A character vector of permission IDs, or NA if there are no
-#'   link-based permissions
-#' @export
-#' @md
-od_get_link_permissions <- function(path, od = NULL) {
-
-  if (is.null(od)) od <- od()
-
-  item <- od$get_item(path)
-  perms <- item$do_operation("permissions")
-
-  link_perms <- Filter(function(p) !is.null(p$link), perms$value)
-
-  if (length(link_perms) == 0) {
-    return(NA_character_)
-  }
-
-  vapply(link_perms, function(p) p$id, character(1))
-}
-
 #' Pull extension from a path
 #'
 #' @param path file path
