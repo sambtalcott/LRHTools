@@ -3,16 +3,21 @@
 \name{od_get_link}
 \alias{od_get_link}
 \alias{od_open}
-\title{Get or open a share link to an item on OneDrive}
+\title{Get or open a link to an item on OneDrive}
 \usage{
-od_get_link(path = "", desktop = TRUE, od = NULL)
+od_get_link(path = "", desktop = TRUE, type = "existing", od = NULL)
 
-od_open(path = "", desktop = TRUE, od = NULL)
+od_open(path = "", desktop = TRUE, type = "existing", od = NULL)
 }
 \arguments{
 \item{path}{The path to get a link to}
 
-\item{desktop}{Should the link be opened in the desktop version of the app?}
+\item{desktop}{Should the link be opened in the desktop version of the app?
+This parameter is ignored when type = "existing".}
+
+\item{type}{Type of link to return. "existing" returns the item's webUrl,
+which only works for people who already have access. "share" creates a new
+sharing link accessible to anyone in the organization.}
 
 \item{od}{OneDrive. If NULL, will use the stored or default onedrive}
 }
