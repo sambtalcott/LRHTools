@@ -32,14 +32,19 @@ ppt_lrh <- function(title = NULL, subtitle = NULL,
 #'
 #' @param p rpptx object (from [ppt_lrh()])
 #' @param content content to add to center
+#' @param notes optional speaker notes for the slide
 #'
 #' @returns rpptx object
 #' @md
 #' @export
-ppt_d1 <- function(p, content) {
-  p |>
+ppt_d1 <- function(p, content, notes = NULL) {
+  p <- p |>
     officer::add_slide("Data 1 Image") |>
     officer::ph_with(content, officer::ph_location_id(3))
+  if (!is.null(notes)) {
+    p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
+  }
+  p
 }
 
 #' Add a double data slide
@@ -47,15 +52,20 @@ ppt_d1 <- function(p, content) {
 #' @param p rpptx object (from [ppt_lrh()])
 #' @param left content to add to left pane
 #' @param right content to add to right pane
+#' @param notes optional speaker notes for the slide
 #'
 #' @returns rpptx object
 #' @md
 #' @export
-ppt_d2 <- function(p, left, right) {
-  p |>
+ppt_d2 <- function(p, left, right, notes = NULL) {
+  p <- p |>
     officer::add_slide("Data 2 Images") |>
     officer::ph_with(left, officer::ph_location_id(3)) |>
     officer::ph_with(right, officer::ph_location_id(4))
+  if (!is.null(notes)) {
+    p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
+  }
+  p
 }
 
 
