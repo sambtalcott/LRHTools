@@ -11,23 +11,23 @@ maintain_azure_tokens(max_age_days = 6, verbose = TRUE)
 and should be removed. Default is 6 days (one day before the typical
 7-day conditional access policy limit).}
 
-\item{verbose}{If TRUE, prints informational messages about token maintenance.}
+\item{verbose}{If TRUE, prints informational messages about removed tokens.}
 }
 \value{
-Invisibly returns a list with counts of tokens removed and refreshed.
+Invisibly returns the count of tokens removed.
 }
 \description{
-Proactively manages Azure/Microsoft 365 authentication tokens to prevent
-authentication errors. Removes tokens older than \code{max_age_days} (which would
-fail to refresh due to conditional access policies) and refreshes tokens
-that are still valid to extend their lifetime.
+Removes Azure/Microsoft 365 authentication tokens older than \code{max_age_days}
+to prevent authentication errors from tokens that can no longer be refreshed
+due to conditional access policies. Valid tokens are left alone and will be
+refreshed on-demand by AzureAuth when used.
+}
+\details{
+This function runs automatically on package load.
 }
 \examples{
 \dontrun{
 # Manually run token maintenance
 maintain_azure_tokens()
-
-# Check status without making changes
-maintain_azure_tokens(verbose = TRUE)
 }
 }
