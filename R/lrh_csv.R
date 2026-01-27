@@ -2,9 +2,9 @@
 
 #' LRH CSV writer
 #'
-#' Wraps [write.table()] with some standard defaults. Unlike `readr::write_csv()`,
-#' this function will write date-times in their current timezone (rather than
-#' translating to UTC).
+#' Wraps [data.table::fwrite()] with some standard defaults. Uses the `write.csv`
+#' date-time handling, which writes date-times in their current timezone (rather than
+#' translating to UTC). This is necessary for Tableau.
 #'
 #' @param x the object to be written, preferably a matrix or data frame. If not,
 #'   it is attempted to coerce x to a data frame.
@@ -15,15 +15,17 @@
 #'   are to be written along with x, or a character vector of row names to be written.
 #' @param sep Separator. Defaults to ","
 #' @param qmethod Quote method. Defaults to "double"
+#' @param dateTimeAs How date time items are written.
 #' @param ... Additional arguments passed on to `write.table()`
 #'
 #' @returns `x`, invisibly
 #' @export
 #' @md
 lrh_csv <- function(x, file, na = "", row.names = FALSE, sep = ",",
-                    qmethod = "double", ...) {
-  utils::write.table(x = x, file = file, na = na, row.names = row.names,
-                     sep = sep, qmethod = qmethod, ...)
+                    qmethod = "double", dateTimeAs = "write.csv", ...) {
+
+  data.table::fwrite(x = x, file = file, na = na, row.names = row.names,
+                     sep = sep, qmethod = qmethod, dateTimeAs = dateTimeAs, ...)
   invisible(x)
 }
 

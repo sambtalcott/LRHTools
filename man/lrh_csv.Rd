@@ -11,6 +11,7 @@ lrh_csv(
   row.names = FALSE,
   sep = ",",
   qmethod = "double",
+  dateTimeAs = "write.csv",
   ...
 )
 }
@@ -30,13 +31,15 @@ are to be written along with x, or a character vector of row names to be written
 
 \item{qmethod}{Quote method. Defaults to "double"}
 
+\item{dateTimeAs}{How date time items are written.}
+
 \item{...}{Additional arguments passed on to \code{write.table()}}
 }
 \value{
 \code{x}, invisibly
 }
 \description{
-Wraps \code{\link[=write.table]{write.table()}} with some standard defaults. Unlike \code{readr::write_csv()},
-this function will write date-times in their current timezone (rather than
-translating to UTC).
+Wraps \code{\link[data.table:fwrite]{data.table::fwrite()}} with some standard defaults. Uses the \code{write.csv}
+date-time handling, which writes date-times in their current timezone (rather than
+translating to UTC). This is necessary for Tableau.
 }
