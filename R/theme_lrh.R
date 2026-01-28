@@ -5,6 +5,7 @@
 #'
 #' @param grid Which grid lines should be shown? Use `TRUE` or `FALSE` to toggle
 #' all grid lines, or a string combination of `X`, `x`, `Y`, `y` for major and minor x and y grid lines.
+#' @param grid_color Color of grid lines added by the `grid` parameter. Defaults to `"#CBCBCB"`.
 #' @param legend_style Either "top" or "right"
 #' @param border Include a panel border?
 #' @param md Should text elements use [ggtext::element_markdown()]?
@@ -16,7 +17,7 @@
 #' @returns a ggplot2 theme statement
 #' @export
 #' @md
-theme_lrh <- function(grid = FALSE, legend_style = "top", border = FALSE, md = FALSE,
+theme_lrh <- function(grid = FALSE, grid_color = "#CBCBCB", legend_style = "top", border = FALSE, md = FALSE,
                       base_font = "Open Sans",
                       title_font = "Open Sans SemiCondensed ExtraBold",
                       subtitle_font = "Open Sans SemiCondensed SemiBold", ...) {
@@ -64,8 +65,8 @@ theme_lrh <- function(grid = FALSE, legend_style = "top", border = FALSE, md = F
       # Faceting
       strip.text = txt(family = subtitle_font, size = 16, face = "bold"),
       # Grid
-      panel.grid.minor = ggplot2::element_line(color = "#CBCBCB", linewidth = 0.5),
-      panel.grid.major = ggplot2::element_line(color = "#CBCBCB", linewidth = 1)
+      panel.grid.minor = ggplot2::element_line(color = grid_color, linewidth = 0.5),
+      panel.grid.major = ggplot2::element_line(color = grid_color, linewidth = 1)
     )
 
   # Adjust grid

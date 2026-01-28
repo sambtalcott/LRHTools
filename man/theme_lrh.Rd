@@ -6,6 +6,7 @@
 \usage{
 theme_lrh(
   grid = FALSE,
+  grid_color = "#CBCBCB",
   legend_style = "top",
   border = FALSE,
   md = FALSE,
@@ -18,6 +19,8 @@ theme_lrh(
 \arguments{
 \item{grid}{Which grid lines should be shown? Use \code{TRUE} or \code{FALSE} to toggle
 all grid lines, or a string combination of \code{X}, \code{x}, \code{Y}, \code{y} for major and minor x and y grid lines.}
+
+\item{grid_color}{Color of grid lines added by the \code{grid} parameter. Defaults to \code{"#CBCBCB"}.}
 
 \item{legend_style}{Either "top" or "right"}
 
