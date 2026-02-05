@@ -132,7 +132,13 @@ ph_with.gt_tbl <- function(x, value, location, ...) {
 #' @export
 #' @md
 ppt_save <- function(p, location = NULL, open = FALSE) {
-  location <- location %||% rstudioapi::selectFile(existing = FALSE, filter = "Powerpoint File (*.pptx)")
+
+  if (is.null(location)) {
+    location <- rstudioapi::selectFile(existing = FALSE, caption = "Save Powerpoint File (*.pptx)")
+    if (!is.null(location) && !stringr::str_detect(location, "\\.pptx$")) {
+      location <- paste0(location, ".pptx")
+    }
+  }
 
   print(p, location)
 
