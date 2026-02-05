@@ -166,12 +166,46 @@ od_get_shortcut <- function(name, od = NULL) {
 
 }
 
+od_list_recursive <- function(folder, od, info, progress) {
+  progress$n <- progress$n + 1
+  progress$path <- if (nchar(folder) > 0) folder else "/"
+  cli::cli_progress_update(id = progress$id)
+
+  # Always use full_names = FALSE to avoid absolute paths that break ms_drive_item;
+  # we build relative paths manually by prepending the folder prefix.
+  items <- od$list_items(path = folder, full_names = FALSE, info = info) |>
+    tibble::as_tibble()
+
+  if (nrow(items) == 0) return(items)
+
+  dirs <- items[items$isdir == TRUE, ]
+  files <- items[items$isdir == FALSE, ]
+
+  # Prepend folder path to build full relative names
+  prefix <- if (nchar(folder) > 0) paste0(folder, "/") else ""
+  if (nrow(files) > 0) files$name <- paste0(prefix, files$name)
+
+  if (nrow(dirs) > 0) {
+    subfolder_paths <- paste0(prefix, dirs$name)
+    sub_results <- lapply(subfolder_paths, function(subfolder_path) {
+      od_list_recursive(folder = subfolder_path, od = od, info = info,
+                        progress = progress)
+    })
+    dplyr::bind_rows(c(list(files), sub_results))
+  } else {
+    files
+  }
+}
+
 #' List OneDrive Items
 #'
 #' @param folder Path specification
 #' @param od OneDrive. If NULL, will use the stored or default onedrive
 #' @param pattern Optional pattern to filter on.
 #' @param full_names Should full names be shown?
+#' @param recursive If TRUE, recursively list all files in subfolders.
+#'   When TRUE, full_names is forced to TRUE and only files (not folders)
+#'   are returned. Default is FALSE.
 #' @param info "name", "partial", or "all". "partial" and "all" return data.frames,
 #' "name" returns a vector of just names
 #'
@@ -180,12 +214,35 @@ od_get_shortcut <- function(name, od = NULL) {
 #' @export
 #' @md
 od_list <- function(folder = "", od = NULL, pattern = NULL, full_names = FALSE,
-                    info = "partial") {
+                    recursive = FALSE, info = "partial") {
 
   if (is.null(od)) od <- od()
 
-  items <- od$list_items(path = folder, full_names = full_names, info = info) |>
-    tibble::as_tibble()
+  if (recursive) {
+    # Need isdir column for recursion; use "partial" internally if info = "name"
+    internal_info <- if (info == "name") "partial" else info
+
+    progress <- new.env(parent = emptyenv())
+    progress$n <- 0
+    progress$path <- "/"
+    progress$id <- cli::cli_progress_message(
+      "Gathering results from {.path {progress$path}}")
+
+    items <- od_list_recursive(folder = folder, od = od, info = internal_info,
+                               progress = progress)
+
+    cli::cli_progress_done(id = progress$id)
+    cli::cli_alert_success("Gathered results from {progress$n} folder{?s}")
+
+    # Convert back to name-only if that's what was requested
+    if (info == "name") {
+      items <- tibble::tibble(name = items$name)
+    }
+  } else {
+    items <- od$list_items(path = folder, full_names = full_names, info = info) |>
+      tibble::as_tibble()
+  }
+
   if (!is.null(pattern)) {
     items[grepl(pattern, items$name), ]
   } else {

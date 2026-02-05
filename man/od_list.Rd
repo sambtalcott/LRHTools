@@ -9,6 +9,7 @@ od_list(
   od = NULL,
   pattern = NULL,
   full_names = FALSE,
+  recursive = FALSE,
   info = "partial"
 )
 }
@@ -20,6 +21,10 @@ od_list(
 \item{pattern}{Optional pattern to filter on.}
 
 \item{full_names}{Should full names be shown?}
+
+\item{recursive}{If TRUE, recursively list all files in subfolders.
+When TRUE, full_names is forced to TRUE and only files (not folders)
+are returned. Default is FALSE.}
 
 \item{info}{"name", "partial", or "all". "partial" and "all" return data.frames,
 "name" returns a vector of just names}
