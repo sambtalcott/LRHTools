@@ -120,3 +120,25 @@ ph_with.gt_tbl <- function(x, value, location, ...) {
 
   officer::ph_with(x, officer::external_img(tf), new_loc)
 }
+
+
+#' Save Powerpoint file
+#'
+#' @param p file to save
+#' @param location location. If omitted, will open a dialog to select a location
+#' @param open Should the file be opened after saving?
+#'
+#' @returns p (invisibly)
+#' @export
+#' @md
+ppt_save <- function(p, location = NULL, open = FALSE) {
+  location <- location %||% rstudioapi::selectFile(existing = FALSE, filter = "Powerpoint File (*.pptx)")
+
+  print(p, location)
+
+  if (open) {
+    shell.exec(location)
+  }
+
+  invisible(p)
+}
