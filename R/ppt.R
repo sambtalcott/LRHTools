@@ -1,5 +1,21 @@
 
 
+#' Convert ggplot to editable vector graphic
+#'
+#' If the content is a ggplot object, wraps it with [rvg::dml()] so it is
+#' inserted as an editable vector graphic. Otherwise returns the content as-is.
+#'
+#' @param content content to potentially convert
+#' @returns content, possibly wrapped in [rvg::dml()]
+#' @keywords internal
+ppt_as_dml <- function(content) {
+  if (inherits(content, "gg")) {
+    rvg::dml(ggobj = content)
+  } else {
+    content
+  }
+}
+
 #' Create new Powerpoint
 #'
 #' Extends [officer] to create a new LRH Data PPT Slide with a title and subtitle
@@ -40,7 +56,7 @@ ppt_lrh <- function(title = NULL, subtitle = NULL,
 ppt_d1 <- function(p, content, notes = NULL) {
   p <- p |>
     officer::add_slide("Data 1 Image") |>
-    officer::ph_with(content, officer::ph_location_id(3))
+    officer::ph_with(ppt_as_dml(content), officer::ph_location_id(3))
   if (!is.null(notes)) {
     p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
   }
@@ -60,8 +76,8 @@ ppt_d1 <- function(p, content, notes = NULL) {
 ppt_d2 <- function(p, left, right, notes = NULL) {
   p <- p |>
     officer::add_slide("Data 2 Images") |>
-    officer::ph_with(left, officer::ph_location_id(3)) |>
-    officer::ph_with(right, officer::ph_location_id(4))
+    officer::ph_with(ppt_as_dml(left), officer::ph_location_id(3)) |>
+    officer::ph_with(ppt_as_dml(right), officer::ph_location_id(4))
   if (!is.null(notes)) {
     p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
   }

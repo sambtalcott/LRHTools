@@ -44,7 +44,8 @@ Imports:
     gt,
     magick,
     systemfonts,
-    data.table
+    data.table,
+    rvg
 RoxygenNote: 7.3.3
 Suggests: 
     testthat (>= 3.0.0)
