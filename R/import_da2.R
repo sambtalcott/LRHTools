@@ -25,6 +25,14 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
 
   if (!is.null(ddb_reference)) {
     # Pull the reference table and map it to column types
+    con <- lrh_con()
+    if (!(ddb_reference %in% DBI::dbListTables(con))) {
+      cli::cli_warn(c("!" = "Reference table {.val {ddb_reference}} does not exist. Importing without reference."))
+      ddb_reference <- NULL
+    }
+  }
+
+  if (!is.null(ddb_reference)) {
     ref <- pull_duckdb(ddb_reference, max_rows = 0)
     c_list <- purrr::map(ref, \(x) {
       if (inherits(x, "POSIXct") || inherits(x, "POSIXt") || is.character(x)) {
