@@ -23,6 +23,16 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
                      "i" = "Provided file is {.val {basename(file)}}"))
   }
 
+  # Fix null bytes in the file if they exist
+  raw <- readBin(file, "raw", n = file.info(file)$size)
+  if (any(raw == as.raw(0x00))) {
+    cli::cli_warn(c("!" = "File {.val {basename(file)}} contains null bytes. Removing before import."))
+    raw <- raw[raw != as.raw(0x00)]
+    file <- tempfile(fileext = ".csv")
+    writeBin(raw, file)
+    on.exit(unlink(file), add = TRUE)
+  }
+
   if (!is.null(ddb_reference)) {
     # Pull the reference table and map it to column types
     con <- lrh_con()
