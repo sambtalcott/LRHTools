@@ -41,5 +41,6 @@ upsert_duckdb_local(
 number of rows affected
 }
 \description{
-Performs an upsert on a duckdb table.
+Performs an upsert on a duckdb table. If the table doesn't yet exist, this
+function will prompt the user if they would like to create it.
 }

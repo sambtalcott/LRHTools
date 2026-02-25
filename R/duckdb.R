@@ -245,7 +245,8 @@ write_tz_duckdb <- function(table, x, overwrite = FALSE) {
 
 #' Upsert in DuckDB
 #'
-#' Performs an upsert on a duckdb table.
+#' Performs an upsert on a duckdb table. If the table doesn't yet exist, this
+#' function will prompt the user if they would like to create it.
 #'
 #' @param table Table name
 #' @param x data frame to update
@@ -269,6 +270,20 @@ upsert_duckdb <- function(table, x, id_col, dt_col) {
 
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")
+
+  # Check if the table exists
+  if (!(table %in% DBI::dbListTables(con))) {
+    create <- utils::askYesNo(
+      cli::format_inline("Table \"{table}\" does not exist. Create it?")
+    )
+    if (isTRUE(create)) {
+      write_tz_duckdb(table, x)
+      cli::cli_alert_success("Created table {.val {table}} with {.val {nrow(x)}} row{?s}")
+      return(invisible(nrow(x)))
+    } else {
+      cli::cli_abort("Table {.val {table}} does not exist. Upsert cancelled.")
+    }
+  }
 
   # Check / alter the primary key column
   sch <- DBI::dbGetQuery(con, stringr::str_glue("PRAGMA table_info({table})"))
