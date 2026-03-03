@@ -2,20 +2,30 @@
 % Please edit documentation in R/ppt.R
 \name{ppt_d1}
 \alias{ppt_d1}
-\title{Add a single data slide}
+\alias{ppt_d2}
+\title{Add data slides to an \link[officer:officer]{officer::officer} ppt object}
 \usage{
-ppt_d1(p, content, notes = NULL)
+ppt_d1(p, content, as_rvg = TRUE, notes = NULL)
+
+ppt_d2(p, left, right, as_rvg = TRUE, notes = NULL)
 }
 \arguments{
 \item{p}{rpptx object (from \code{\link[=ppt_lrh]{ppt_lrh()}})}
 
 \item{content}{content to add to center}
 
+\item{as_rvg}{For ggplot objects, should they be inserted as rvg instead of png?}
+
 \item{notes}{optional speaker notes for the slide}
+
+\item{left}{content to add to left pane}
+
+\item{right}{content to add to right pane}
 }
 \value{
 rpptx object
 }
 \description{
-Add a single data slide
+\code{ppt_d1()} uses the "Data 1 Image" template. \code{ppt_d2()} uses the "Data 2
+Images" template.
 }

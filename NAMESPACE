@@ -2,6 +2,7 @@
 
 S3method(ph_with,gt_tbl)
 export(append_duckdb)
+export(check_folder)
 export(choose_lrh_db)
 export(connect_duckdb)
 export(ddb_is_encrypted)

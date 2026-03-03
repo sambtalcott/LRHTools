@@ -44,40 +44,44 @@ ppt_lrh <- function(title = NULL, subtitle = NULL,
   p
 }
 
-#' Add a single data slide
+#' Add data slides to an [officer] ppt object
+#'
+#' `ppt_d1()` uses the "Data 1 Image" template. `ppt_d2()` uses the "Data 2
+#' Images" template.
 #'
 #' @param p rpptx object (from [ppt_lrh()])
 #' @param content content to add to center
+#' @param left content to add to left pane
+#' @param right content to add to right pane
 #' @param notes optional speaker notes for the slide
+#' @param as_rvg For ggplot objects, should they be inserted as rvg instead of png?
 #'
 #' @returns rpptx object
 #' @md
 #' @export
-ppt_d1 <- function(p, content, notes = NULL) {
+ppt_d1 <- function(p, content, as_rvg = TRUE, notes = NULL) {
+  if (as_rvg) content <- ppt_as_dml(content)
   p <- p |>
     officer::add_slide("Data 1 Image") |>
-    officer::ph_with(ppt_as_dml(content), officer::ph_location_id(3))
+    officer::ph_with(content, officer::ph_location_id(3))
   if (!is.null(notes)) {
     p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
   }
   p
 }
 
-#' Add a double data slide
-#'
-#' @param p rpptx object (from [ppt_lrh()])
-#' @param left content to add to left pane
-#' @param right content to add to right pane
-#' @param notes optional speaker notes for the slide
-#'
-#' @returns rpptx object
 #' @md
+#' @rdname ppt_d1
 #' @export
-ppt_d2 <- function(p, left, right, notes = NULL) {
+ppt_d2 <- function(p, left, right, as_rvg = TRUE, notes = NULL) {
+  if (as_rvg) {
+    left <- ppt_as_dml(left)
+    right <- ppt_as_dml(right)
+  }
   p <- p |>
     officer::add_slide("Data 2 Images") |>
-    officer::ph_with(ppt_as_dml(left), officer::ph_location_id(3)) |>
-    officer::ph_with(ppt_as_dml(right), officer::ph_location_id(4))
+    officer::ph_with(left, officer::ph_location_id(3)) |>
+    officer::ph_with(right, officer::ph_location_id(4))
   if (!is.null(notes)) {
     p <- officer::set_notes(p, notes, officer::notes_location_type("body"))
   }
