@@ -84,30 +84,42 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   )
   .ddb_env$con_type <- type
 
-  # General connection setup
-  # Set autoload (for using things like 'today' in patient days view)
-  DBI::dbExecute(.ddb_env$con, "SET autoinstall_known_extensions = 1;")
-  DBI::dbExecute(.ddb_env$con, "SET autoload_known_extensions = 1;")
+  # If anything below fails, clean up the in-memory connection so the next
+  # call to lrh_con() doesn't return a connection with no database attached
+  tryCatch({
 
-  # Set timezone (for importing) to UTC
-  DBI::dbExecute(.ddb_env$con, "SET TimeZone = 'UTC';")
+    # General connection setup
+    # Set autoload (for using things like 'today' in patient days view)
+    DBI::dbExecute(.ddb_env$con, "SET autoinstall_known_extensions = 1;")
+    DBI::dbExecute(.ddb_env$con, "SET autoload_known_extensions = 1;")
 
-  # Attach database (required to be this way for encrypted databases)
-  attach_extras <- NULL
-  # Encryption details
-  if (ddb_is_encrypted(db_file)) {
-    key <- tntpr::tntp_cred("DUCKDB_KEY") # Has prompting built in
-    DBI::dbExecute(.ddb_env$con, "INSTALL httpfs; LOAD httpfs;") # To speed up encryption
-    attach_extras <- paste0("ENCRYPTION_KEY '", key, "'")
-  }
-  # Set read_only
-  if (ro) attach_extras <- c(attach_extras, "READ_ONLY")
-  attach_str <- paste0("ATTACH '", db_file, "' AS db")
-  if (length(attach_extras) > 0) {
-    attach_str <- paste0(attach_str, " (", paste0(attach_extras, collapse = ", "), ")")
-  }
-  DBI::dbExecute(.ddb_env$con, attach_str)
-  DBI::dbExecute(.ddb_env$con, "USE db")
+    # Set timezone (for importing) to UTC
+    DBI::dbExecute(.ddb_env$con, "SET TimeZone = 'UTC';")
+
+    # Attach database (required to be this way for encrypted databases)
+    attach_extras <- NULL
+    # Encryption details
+    if (ddb_is_encrypted(db_file)) {
+      key <- tntpr::tntp_cred("DUCKDB_KEY") # Has prompting built in
+      DBI::dbExecute(.ddb_env$con, "INSTALL httpfs; LOAD httpfs;") # To speed up encryption
+      attach_extras <- paste0("ENCRYPTION_KEY '", key, "'")
+    }
+    # Set read_only
+    if (ro) attach_extras <- c(attach_extras, "READ_ONLY")
+    attach_str <- paste0("ATTACH '", db_file, "' AS db")
+    if (length(attach_extras) > 0) {
+      attach_str <- paste0(attach_str, " (", paste0(attach_extras, collapse = ", "), ")")
+    }
+    DBI::dbExecute(.ddb_env$con, attach_str)
+    DBI::dbExecute(.ddb_env$con, "USE db")
+
+  }, error = \(e) {
+    lrh_disconnect()
+    cli::cli_abort(c(
+      "x" = "Unable to connect to DuckDB",
+      "i" = "Error Message: {conditionMessage(e)}"
+    ), call = rlang::caller_env())
+  })
 
   # return the connection
   .ddb_env$con
