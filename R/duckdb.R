@@ -65,6 +65,9 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
     return (.ddb_env$con)
   }
 
+  # Track previous connection type for restore-on-failure when switching
+  prev_type <- .ddb_env$con_type
+
   # If existing non-matching connection, close it
   if (!is.null(.ddb_env$con) && .ddb_env$con_type != type) {
     lrh_disconnect()
@@ -115,6 +118,13 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
 
   }, error = \(e) {
     lrh_disconnect()
+    # If we were switching from an existing connection, try to restore it
+    if (!is.null(prev_type) && prev_type != type) {
+      tryCatch(
+        lrh_con(type = prev_type),
+        error = \(re) cli::cli_warn("Could not restore previous {.val {prev_type}} connection")
+      )
+    }
     cli::cli_abort(c(
       "x" = "Unable to connect to DuckDB",
       "i" = "Error Message: {conditionMessage(e)}"
@@ -149,6 +159,10 @@ lrh_disconnect <- function() {
 #' @returns nothing
 #' @export
 append_duckdb <- function(x, table, remove_duplicates = TRUE) {
+  # Restore previous connection type on exit if it was read_only
+  prev_type <- .ddb_env$con_type
+  on.exit(if (identical(prev_type, "read_only")) lrh_con(type = "read_only"), add = TRUE)
+
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")
 
@@ -187,6 +201,9 @@ append_duckdb <- function(x, table, remove_duplicates = TRUE) {
 #' @returns Nothing
 #' @export
 replace_duckdb <- function(x, table, delete_where) {
+  # Restore previous connection type on exit if it was read_only
+  prev_type <- .ddb_env$con_type
+  on.exit(if (identical(prev_type, "read_only")) lrh_con(type = "read_only"), add = TRUE)
 
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")
@@ -231,6 +248,9 @@ pull_duckdb <- function(table, max_rows = Inf) {
 #' @export
 #' @md
 write_tz_duckdb <- function(table, x, overwrite = FALSE) {
+  # Restore previous connection type on exit if it was read_only
+  prev_type <- .ddb_env$con_type
+  on.exit(if (identical(prev_type, "read_only")) lrh_con(type = "read_only"), add = TRUE)
 
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")
@@ -279,6 +299,10 @@ upsert_duckdb <- function(table, x, id_col, dt_col) {
   if (any(is.na(x[[id_col]]))) {
     cli::cli_abort(c("x" = "{.var x} contains NAs in {.var {id_col}}"))
   }
+
+  # Restore previous connection type on exit if it was read_only
+  prev_type <- .ddb_env$con_type
+  on.exit(if (identical(prev_type, "read_only")) lrh_con(type = "read_only"), add = TRUE)
 
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")

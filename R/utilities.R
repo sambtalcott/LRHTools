@@ -4,8 +4,6 @@
 #'
 #' @returns the current OR correct path
 #' @export
-#'
-#' @examples
 check_folder <- function(path) {
   if (!dir.exists(path)) {
     cli::cli_alert_info("Could not find folder {.val {path}}. Choose the correct folder to continue.")
