@@ -65,3 +65,33 @@ sql_ce_date <- function(x) {
     "STRPTIME(SUBSTR({col_name}, 3, 8), '%Y%m%d')::DATE"
   ))
 }
+
+
+#' Age at a given time
+#'
+#' `sql_age()` is designed to be used in lazy tibbles. Use with the `!!`
+#' operator for local evaluation into a `sql()` string first.
+#'
+#' @param dt date at which to find the age
+#' @param dob date of birth
+#'
+#' @returns `sql_age()` returns a sql() statement, `age()` returns an integer age
+#' @export
+#' @md
+sql_age <- function(dt, dob) {
+
+  dt <- as.character(substitute(dt))
+  dob <- as.character(substitute(dob))
+
+  sql(str_glue(
+    "DATEDIFF('year', {dob}, {dt}) -
+    CASE WHEN STRFTIME({dt}, '%m-%d') < STRFTIME({dob}, '%m-%d') THEN 1 ELSE 0 END"
+  ))
+}
+
+#' @export
+#' @rdname sql_age
+age <- function(dt, dob) {
+  as.integer(lubridate::year(dt) - lubridate::year(dob) -
+    (format(dt, "%m-%d") < format(dob, "%m-%d")))
+}
