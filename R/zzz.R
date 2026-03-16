@@ -7,6 +7,7 @@
   tryCatch(
     maintain_azure_tokens(max_age_days = 6, verbose = FALSE),
     error = function(e) {
+      packageStartupMessage("Failed to run maintain_azure_tokens()")
       # Silently ignore errors during startup
       # (e.g., if AzureAuth is not fully available)
     }

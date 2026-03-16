@@ -4,10 +4,10 @@
 
 #' Maintain Azure Authentication Tokens
 #'
-#' Removes Azure/Microsoft 365 authentication tokens older than `max_age_days`
-#' to prevent authentication errors from tokens that can no longer be refreshed
-#' due to conditional access policies. Valid tokens are left alone and will be
-#' refreshed on-demand by AzureAuth when used.
+#' Removes invalid Azure/Microsoft 365 authentication tokens to prevent
+#' authentication errors. Tokens are removed if they are older than
+#' `max_age_days` OR if they fail to refresh (e.g., due to a password change
+#' or revocation). Valid tokens are left alone.
 #'
 #' This function runs automatically on package load.
 #'
@@ -35,15 +35,33 @@ maintain_azure_tokens <- function(max_age_days = 6, verbose = TRUE) {
   token_files <- list.files(token_dir, pattern = "^[a-f0-9]+$", full.names = TRUE)
   if (length(token_files) == 0) return(invisible(0L))
 
-  # Get file info and filter to stale tokens
-  file_info <- file.info(token_files)
-  age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
-  stale_files <- token_files[age_days > max_age_days]
+  removed <- 0L
 
-  if (length(stale_files) == 0) return(invisible(0L))
+  for (tf in token_files) {
+    should_remove <- FALSE
 
-  # Remove stale tokens - AzureAuth will handle refreshing valid tokens on-demand
-  removed <- sum(file.remove(stale_files))
+    # First check: remove tokens older than max_age_days
+    age_days <- as.numeric(difftime(Sys.time(), file.info(tf)$mtime, units = "days"))
+    if (age_days > max_age_days) {
+      should_remove <- TRUE
+    } else {
+      # Second check: try to refresh the token to catch revoked tokens
+      # (e.g., due to password change) that are still under the age limit
+      tryCatch({
+        token <- readRDS(tf)
+        if (inherits(token, "AzureToken")) {
+          token$refresh()
+        }
+      }, error = function(e) {
+        should_remove <<- TRUE
+      })
+    }
+
+    if (should_remove) {
+      file.remove(tf)
+      removed <- removed + 1L
+    }
+  }
 
   if (verbose && removed > 0) {
     cli::cli_alert_info("Removed {removed} stale Azure token{?s}")

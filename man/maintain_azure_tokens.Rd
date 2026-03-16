@@ -17,10 +17,10 @@ and should be removed. Default is 6 days (one day before the typical
 Invisibly returns the count of tokens removed.
 }
 \description{
-Removes Azure/Microsoft 365 authentication tokens older than \code{max_age_days}
-to prevent authentication errors from tokens that can no longer be refreshed
-due to conditional access policies. Valid tokens are left alone and will be
-refreshed on-demand by AzureAuth when used.
+Removes invalid Azure/Microsoft 365 authentication tokens to prevent
+authentication errors. Tokens are removed if they are older than
+\code{max_age_days} OR if they fail to refresh (e.g., due to a password change
+or revocation). Valid tokens are left alone.
 }
 \details{
 This function runs automatically on package load.
