@@ -7,7 +7,8 @@
 alias_check(
   names = character(0),
   table = "PG_PROVIDER_ALIAS",
-  sensitivity = 0.7
+  sensitivity = 0.7,
+  print = 10
 )
 }
 \arguments{
@@ -17,6 +18,8 @@ alias_check(
 
 \item{sensitivity}{How similar do names need to be to trigger an audit? Set
 to 0 to always audit.}
+
+\item{print}{How many rows of the table should be printed? Set to 0 or FALSE to hide}
 }
 \value{
 the name check data frame, invisibly

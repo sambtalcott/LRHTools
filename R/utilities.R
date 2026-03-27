@@ -37,10 +37,12 @@ name_sim <- function(a, b) {
 #' @param table table to check names against
 #' @param sensitivity How similar do names need to be to trigger an audit? Set
 #' to 0 to always audit.
+#' @param print How many rows of the table should be printed? Set to 0 or FALSE to hide
 #'
 #' @returns the name check data frame, invisibly
 #' @export
-alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensitivity = 0.7) {
+alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensitivity = 0.7,
+                        print = 10) {
   alias <- pull_duckdb(table)
 
   # Validate
@@ -95,6 +97,10 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
 
     append_duckdb(y2, table)
     cli::cli_abort("{.val {table}} updated. Rerun the script that triggered this")
+  }
+
+  if (print > 0) {
+    print(final, n = print)
   }
 
   invisible(final)
