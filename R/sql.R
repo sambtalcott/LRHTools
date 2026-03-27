@@ -83,7 +83,7 @@ sql_age <- function(dt, dob) {
   dt <- as.character(substitute(dt))
   dob <- as.character(substitute(dob))
 
-  sql(str_glue(
+  dplyr::sql(stringr::str_glue(
     "DATEDIFF('year', {dob}, {dt}) -
     CASE WHEN STRFTIME({dt}, '%m-%d') < STRFTIME({dob}, '%m-%d') THEN 1 ELSE 0 END"
   ))
