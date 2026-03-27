@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "mcp__r-studio__execute_r"
+      "mcp__r-studio__execute_r",
+      "WebFetch(domain:cran.r-project.org)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

@@ -31,23 +31,89 @@ name_sim <- function(a, b) {
     dplyr::pull(sim)
 }
 
-#' Check names for similarities
+#' Check names against current aliases
 #'
-#' @param names vector of names to check
+#' @param names character vector of names to check
+#' @param table table to check names against
+#' @param sensitivity How similar do names need to be to trigger an audit? Set
+#' to 0 to always audit.
 #'
-#' @returns prints the top similarities and silently returns the grid
+#' @returns the name check data frame, invisibly
 #' @export
-name_check <- function(names) {
-  expand.grid(a = sort(unique(names)), b = sort(unique(names)), stringsAsFactors = FALSE) |>
+alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensitivity = 0.7) {
+  alias <- pull_duckdb(table)
+
+  # Validate
+  old_match <- intersect(names, alias$name_old)
+  if (length(old_match) > 0) {
+    cli::cli_abort(c(
+      "x" = "{.var names} contains values in the {.var name_old} column of {.val {table}}",
+      "i" = "Check that names are being properly recategorized before this step."
+    ))
+  }
+
+  if (any(alias$name_old %in% alias$name_new)) {
+    print(dplyr::filter(alias, name_old %in% name_new | name_new %in% name_old))
+    cli::cli_abort(c(
+      "x" = "Table {.val {table}} contains the same value(s) in {.var name_old} and {.var name_new}"
+    ))
+  }
+
+  # Generate similarity df
+  new_names <- setdiff(names, alias$name_new)
+
+  a_a <- name_grid(alias$name_new) |>
+    dplyr::mutate(sim = name_sim(a, b),
+                  type = "Alias - Alias Check (Fix Manually)")
+
+  n_a <- name_grid(new_names, alias$name_new) |>
+    dplyr::mutate(sim = name_sim(a, b),
+                  type = "Name - Alias Check (ALWAYS choose b)")
+
+  n_n <- name_grid(new_names) |>
+    dplyr::mutate(sim = name_sim(a, b),
+                  type = "Name - Name Check (Choose a or b)")
+
+  final <- dplyr::bind_rows(a_a, n_a, n_n) |>
+    dplyr::arrange(desc(sim))
+
+  if (dplyr::filter(final, sim >= sensitivity) |> nrow() > 0) {
+    # Open in excel. Type "a" or "b" to process into keeping a name and save
+    file <- final |> dplyr::mutate(keep = NA) |> lrh_excel()
+
+    cli::cli_inform(c("Name Audit Triggered. Check and update if needed",
+                      i = "Update the file with {.val a} or {.val b} to decide which to use.",
+                      i = "Save, close and then press enter to update the {.val PG_PROVIDER_ALIAS} table",
+                      i = "Re-run the script when finished to re-sync aliases"))
+    readline()
+
+    y <- openxlsx2::read_xlsx(file)
+    y2 <- y |>
+      dplyr::filter(!is.na(keep)) |>
+      dplyr::transmute(name_old = dplyr::recode_values(keep, "a" ~ b, "b" ~ a),
+                       name_new = dplyr::recode_values(keep, "a" ~ a, "b" ~ b))
+
+    append_duckdb(y2, table)
+    cli::cli_abort("{.val {table}} updated. Rerun the script that triggered this")
+  }
+
+  invisible(final)
+}
+
+#' Create a name grid
+#'
+#' @param a x names
+#' @param b y names
+#'
+#' @returns a tibble
+#' @export
+name_grid <- function(a, b = a) {
+  expand.grid(a = sort(unique(a)), b = sort(unique(b)), stringsAsFactors = FALSE) |>
     tibble::as_tibble() |>
     # Remove A-B B-A duplicates
     dplyr::mutate(key = stringr::str_c(pmin(a, b), pmax(a, b))) |>
     dplyr::distinct(key, .keep_all = TRUE) |>
     dplyr::select(-key) |>
     # Remove a == b
-    dplyr::filter(a != b) |>
-    # Sort by similarity of split names
-    dplyr::mutate(sim = name_sim(a, b)) |>
-    dplyr::arrange(desc(sim)) |>
-    print()
+    dplyr::filter(a != b)
 }
