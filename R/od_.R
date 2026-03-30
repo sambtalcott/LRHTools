@@ -538,6 +538,100 @@ od_read_lines <- function(path, od, ...) {
 }
 
 
+#' Helper function for using the Graph API for coauthoring
+#'
+#' @param item ms_drive_item
+#' @param operation operation
+#' @param http_verb verb
+#' @param body body
+#'
+#' @returns nothing
+graph_xl_op <- function(item, operation, http_verb = "GET", body = NULL) {
+  item$do_operation(
+    stringr::str_c("workbook/", operation),
+    http_verb = http_verb,
+    body = body,
+    encode = "json"
+  )
+}
+
+#' Convert an R data frame to the nested list format the Graph API expects
+#'
+#' @param df data frame to convert
+#'
+#' @returns a nested list
+graph_df_to_values <- function(df) {
+  df |>
+    dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.POSIXct), format)) |>
+    dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.Date), format)) |>
+    dplyr::mutate(dplyr::across(dplyr::everything(), \(x) tidyr::replace_na(as.character(x), ""))) |>
+    purrr::pmap(list) |>
+    purrr::map(unname)
+}
+
+#' Append rows to a named Excel Table
+#'
+#' The worksheet must contain a named Table (Insert > Table in Excel).
+#' New rows appear at the bottom. Works while the file is open.
+#'
+#' @param x Data frame of rows to append (columns must match the table)
+#' @param path The location in the Sharepoint drive
+#' @param table Name of the Excel Table
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param check_columns Should the script check that column names are identical
+#' before appending?
+#'
+#' @export
+#' @md
+#' @returns the ms_drive_item (invisibly)
+od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
+
+  if (is.null(od)) od <- od()
+
+  # Error checking: path
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_append()} can only be used on .xlsx files"
+  ))
+
+  # Error checking: table
+  wb <- od_read(path, od = od, type = "wb")
+  if (!table %in% wb$get_tables()$tab_name) cli::cli_abort(c(
+    "x" = "No table with the name {.val {table}} found in file.",
+    "i" = "Found tables {.val {wb$get_tables()$tab_name}}"
+  ))
+  cur_cols <- wb$to_df(named_region = table)
+  if (check_columns && !identical(colnames(x), colnames(cur_cols))) {
+    cli::cli_abort(c(
+      "x" = "Column names from {.var x} don't match column names in table {.val {table}}",
+      "i" = "{.var x} names: {.val {colnames(x)}}",
+      "i" = "table names: {.val {colnames(cur_cols)}}"
+    ))
+  }
+  if (ncol(x) != ncol(cur_cols)) cli::cli_abort(c(
+    "x" = "{.var x} has {.val {ncol(x)}} column{?s}, table {.val {table}} has {.val {ncol(cur_cols)}} column{?s}."
+  ))
+
+  # Append away!
+  table_enc <- utils::URLencode(table, reserved = TRUE)
+  values <- graph_df_to_values(x)
+
+  item <- od$get_item(path)
+
+  graph_xl_op(
+    item,
+    stringr::str_glue("tables('{table_enc}')/rows/add"),
+    http_verb = "POST",
+    body = list(values = values)
+  )
+
+  cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
+  invisible(item)
+}
+
+
 #' @export
 #' @rdname od_read
 od_write <- function(x, path, od = NULL, on_locked = "prompt", ...) {

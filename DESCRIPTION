@@ -46,7 +46,8 @@ Imports:
     systemfonts,
     data.table,
     rvg,
-    stringdist
+    stringdist,
+    tidyr
 RoxygenNote: 7.3.3
 Suggests: 
     testthat (>= 3.0.0)
