@@ -626,10 +626,11 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
 #' @param table Name of the Excel Table
 #' @param id_cols Column name (or vector of names) to use as an id.
 #' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param wb_types Used for [openxlsx2::wb_to_df()] `types` parameter.
 #'
 #' @returns a list of (append, patch) for use with od_xl_append() and od_xl_patch()
 #' @export
-od_xl_compare <- function(x, path, table, id_cols, od = NULL) {
+od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
   if (is.null(od)) od <- od()
 
   # Error checking: path
@@ -648,7 +649,11 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL) {
   ))
 
   # Error checking: column names
-  wb_df <- wb$to_df(named_region = table)
+  if (is.null(wb_types)) {
+    wb_df <- wb$to_df(named_region = table)
+  } else {
+    wb_df <- wb$to_df(named_region = table, types = wb_types)
+  }
   if (!all(colnames(x) %in% colnames(wb_df))) {
     cli::cli_abort(c(
       "x" = "Column names from {.var x} don't match column names in table {.val {table}}",

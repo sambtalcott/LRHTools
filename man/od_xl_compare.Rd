@@ -4,7 +4,7 @@
 \alias{od_xl_compare}
 \title{Compare a dataframe to an existing spreadsheet}
 \usage{
-od_xl_compare(x, path, table, id_cols, od = NULL)
+od_xl_compare(x, path, table, id_cols, od = NULL, wb_types = NULL)
 }
 \arguments{
 \item{x}{Data frame of rows to append (columns must match the table)}
@@ -16,6 +16,8 @@ od_xl_compare(x, path, table, id_cols, od = NULL)
 \item{id_cols}{Column name (or vector of names) to use as an id.}
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
+
+\item{wb_types}{Used for [openxlsx2::wb_to_df()] `types` parameter.}
 }
 \value{
 a list of (append, patch) for use with od_xl_append() and od_xl_patch()
