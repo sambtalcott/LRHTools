@@ -77,7 +77,7 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
                   type = "Name - Name Check (Choose a or b)")
 
   final <- dplyr::bind_rows(a_a, n_a, n_n) |>
-    dplyr::arrange(desc(sim))
+    dplyr::arrange(dplyr::desc(sim))
 
   if (dplyr::filter(final, sim >= sensitivity) |> nrow() > 0) {
     # Open in excel. Type "a" or "b" to process into keeping a name and save

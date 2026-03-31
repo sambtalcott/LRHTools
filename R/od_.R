@@ -537,24 +537,6 @@ od_read_lines <- function(path, od, ...) {
   }
 }
 
-
-#' Helper function for using the Graph API for coauthoring
-#'
-#' @param item ms_drive_item
-#' @param operation operation
-#' @param http_verb verb
-#' @param body body
-#'
-#' @returns nothing
-graph_xl_op <- function(item, operation, http_verb = "GET", body = NULL) {
-  item$do_operation(
-    stringr::str_c("workbook/", operation),
-    http_verb = http_verb,
-    body = body,
-    encode = "json"
-  )
-}
-
 #' Convert an R data frame to the nested list format the Graph API expects
 #'
 #' @param df data frame to convert
@@ -596,6 +578,8 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
     "x" = "{.var od_xl_append()} can only be used on .xlsx files"
   ))
 
+  item <- od$get_item(path)
+
   # Error checking: table
   wb <- od_read(path, od = od, type = "wb")
   if (!table %in% wb$get_tables()$tab_name) cli::cli_abort(c(
@@ -613,21 +597,178 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
   if (ncol(x) != ncol(cur_cols)) cli::cli_abort(c(
     "x" = "{.var x} has {.val {ncol(x)}} column{?s}, table {.val {table}} has {.val {ncol(cur_cols)}} column{?s}."
   ))
+  if (nrow(x) == 0) {
+    cli::cli_alert_info("No rows to append")
+    return (invisible(item))
+  }
 
   # Append away!
   table_enc <- utils::URLencode(table, reserved = TRUE)
   values <- graph_df_to_values(x)
 
-  item <- od$get_item(path)
-
-  graph_xl_op(
-    item,
-    stringr::str_glue("tables('{table_enc}')/rows/add"),
+  item$do_operation(
+    stringr::str_glue("workbook/tables('{table_enc}')/rows/add"),
     http_verb = "POST",
-    body = list(values = values)
+    body = list(values = values),
+    encode = "json"
   )
 
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
+  invisible(item)
+}
+
+#' Compare a dataframe to an existing spreadsheet
+#'
+#' Returns a list of (append, patch)
+#'
+#' @param x Data frame of rows to append (columns must match the table)
+#' @param path The location in the Sharepoint drive
+#' @param table Name of the Excel Table
+#' @param id_cols Column name (or vector of names) to use as an id.
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#'
+#' @returns a list of (append, patch) for use with od_xl_append() and od_xl_patch()
+#' @export
+od_xl_compare <- function(x, path, table, id_cols, od = NULL) {
+  if (is.null(od)) od <- od()
+
+  # Error checking: path
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_compare()} can only be used on .xlsx files"
+  ))
+
+  # Error checking: table
+  wb <- od_read(path, od = od, type = "wb")
+  if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
+    "x" = "No table with the name {.val {table}} found in file.",
+    "i" = "Found tables {.val {wb$tables$tab_name}}"
+  ))
+
+  # Error checking: column names
+  wb_df <- wb$to_df(named_region = table)
+  if (!all(colnames(x) %in% colnames(wb_df))) {
+    cli::cli_abort(c(
+      "x" = "Column names from {.var x} don't match column names in table {.val {table}}",
+      "i" = "{.var x} names: {.val {colnames(x)}}",
+      "i" = "table names: {.val {colnames(wb_df)}}"
+    ))
+  }
+
+  # Find new rows to append
+  new_cols <- setdiff(colnames(wb_df), colnames(x))
+  append <- x |> dplyr::anti_join(wb_df, by = id_cols)
+  append[new_cols] <- NA
+  append <- dplyr::relocate(append, dplyr::all_of(colnames(wb_df)))
+
+  # Find updated rows to patch
+  updated <- x |>
+    dplyr::anti_join(append, by = id_cols) |>
+    dplyr::anti_join(wb_df, by = colnames(x))
+
+  # Find updated values
+  if (nrow(updated) > 0) {
+    patch <- updated |>
+      dplyr::left_join(
+        wb_df |>
+          dplyr::select(dplyr::all_of(colnames(x))) |>
+          dplyr::mutate(row = dplyr::row_number()),
+        by = id_cols, suffix = c("|new", "|old")
+      ) |>
+      tidyr::pivot_longer(-c(dplyr::all_of(id_cols), row),
+                          names_sep = "\\|",
+                          names_to = c("col", "name"),
+                          values_transform = as.character) |>
+      tidyr::pivot_wider() |>
+      dplyr::filter(old != new)
+
+    # Get table metadata for sheet name and cell range
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    tab_sheet <- wb$sheet_names[tab_info$tab_sheet]
+    tab_start <- sub(":.*", "", tab_info$tab_ref)
+    start_col <- openxlsx2::col2int(gsub("[0-9]", "", tab_start))
+    start_row <- as.integer(gsub("[A-Z]", "", tab_start))
+
+    # Map column names to Excel column indices
+    col_indices <- stats::setNames(seq_along(colnames(wb_df)), colnames(wb_df))
+
+    # Add sheet and range (e.g. "C4") for each value to patch
+    patch <- patch |>
+      dplyr::mutate(
+        sheet = tab_sheet,
+        range = paste0(
+          openxlsx2::int2col(start_col + col_indices[col] - 1L),
+          start_row + row  # +1 for header is already covered: row is 1-based data row
+        )
+      )
+  } else {
+    patch <- tibble::tibble(
+      sheet = character(0),
+      range = character(0),
+      new = character(0)
+    )
+  }
+
+
+  list(append = append, patch = patch)
+}
+
+#' Patch cells through the coauthoring API
+#'
+#' This is designed to work with `od_xl_compare()`, but can also be done
+#' manually by creating a data frame with columns `sheet`, `range`, and `new`.
+#'
+#' @param x Data frame with columns `sheet`, `range`, and `new`
+#' @param path The location in the Sharepoint drive
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#'
+#' @returns the ms_drive_item (invisibly)
+#' @export
+#' @md
+od_xl_patch <- function(x, path, od = NULL) {
+
+  if (is.null(od)) od <- od()
+
+  # Error checking: path
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_patch()} can only be used on .xlsx files"
+  ))
+
+  # Error checking: x
+  required <- c("sheet", "range", "new")
+  missing <- setdiff(required, colnames(x))
+  if (length(missing) > 0) cli::cli_abort(c(
+    "x" = "{.var x} is missing required column{?s}: {.val {missing}}",
+    "i" = "{.var x} must have columns {.val {required}}"
+  ))
+  if (nrow(x) == 0) {
+    cli::cli_alert_info("No cells to patch")
+    return(invisible(NULL))
+  }
+
+  # Coerce new values to character for the API
+  if (!is.character(x$new)) x$new <- as.character(x$new)
+
+  item <- od$get_item(path)
+  x$sheet_enc <- utils::URLencode(x$sheet, reserved = TRUE)
+
+  purrr::pmap(x, \(sheet_enc, range, new, ...) {
+    item$do_operation(
+      stringr::str_glue(
+        "workbook/worksheets('{sheet_enc}')/range(address='{range}')"
+      ),
+      http_verb = "PATCH",
+      body = list(values = list(list(new))),
+      encode = "json"
+    )
+  }, .progress = "Patching values")
+
+  cli::cli_alert_success("Patched {nrow(x)} cell{?s} in {.val {path}}")
   invisible(item)
 }
 
