@@ -537,6 +537,37 @@ od_read_lines <- function(path, od, ...) {
   }
 }
 
+#' Unprotect sheets, run an expression, then re-protect
+#'
+#' Sheets are always re-protected on exit, even if the expression errors.
+#'
+#' @param item An ms_drive_item for the workbook
+#' @param sheets Character vector of sheet names to unprotect
+#'
+#' @returns NULL (called for side effects)
+xl_unprotect <- function(item, sheets) {
+  sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
+  for (s in sheets_enc) {
+    item$do_operation(
+      stringr::str_glue("workbook/worksheets('{s}')/protection/unprotect"),
+      http_verb = "POST"
+    )
+  }
+}
+
+#' @rdname xl_unprotect
+xl_protect <- function(item, sheets) {
+  sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
+  for (s in sheets_enc) {
+    item$do_operation(
+      stringr::str_glue("workbook/worksheets('{s}')/protection/protect"),
+      http_verb = "POST",
+      body = list(options = list()),
+      encode = "json"
+    )
+  }
+}
+
 #' Convert an R data frame to the nested list format the Graph API expects
 #'
 #' @param df data frame to convert
@@ -562,11 +593,15 @@ graph_df_to_values <- function(df) {
 #' @param od OneDrive (if null, will use the stored OneDrive)
 #' @param check_columns Should the script check that column names are identical
 #' before appending?
+#' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
+#'   appending and re-protects afterwards. Only works with passwordless
+#'   protection.
 #'
 #' @export
 #' @md
 #' @returns the ms_drive_item (invisibly)
-od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
+od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
+                         unprotect = FALSE) {
 
   if (is.null(od)) od <- od()
 
@@ -605,6 +640,14 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE) {
   # Append away!
   table_enc <- utils::URLencode(table, reserved = TRUE)
   values <- graph_df_to_values(x)
+
+  # Unprotect sheet if needed
+  if (unprotect) {
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    sheet <- wb$sheet_names[tab_info$tab_sheet]
+    xl_unprotect(item, sheet)
+    on.exit(xl_protect(item, sheet), add = TRUE)
+  }
 
   item$do_operation(
     stringr::str_glue("workbook/tables('{table_enc}')/rows/add"),
@@ -728,11 +771,14 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
 #' @param x Data frame with columns `sheet`, `range`, and `new`
 #' @param path The location in the Sharepoint drive
 #' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param unprotect If `TRUE`, temporarily unprotects affected worksheets before
+#'   patching and re-protects afterwards. Only works with passwordless
+#'   protection.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
-od_xl_patch <- function(x, path, od = NULL) {
+od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 
   if (is.null(od)) od <- od()
 
@@ -760,6 +806,14 @@ od_xl_patch <- function(x, path, od = NULL) {
   if (!is.character(x$new)) x$new <- as.character(x$new)
 
   item <- od$get_item(path)
+
+  # Unprotect affected sheets if needed
+  if (unprotect) {
+    sheets <- unique(x$sheet)
+    xl_unprotect(item, sheets)
+    on.exit(xl_protect(item, sheets), add = TRUE)
+  }
+
   x$sheet_enc <- utils::URLencode(x$sheet, reserved = TRUE)
 
   purrr::pmap(x, \(sheet_enc, range, new, ...) {

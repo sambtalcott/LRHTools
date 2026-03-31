@@ -4,7 +4,7 @@
 \alias{od_xl_patch}
 \title{Patch cells through the coauthoring API}
 \usage{
-od_xl_patch(x, path, od = NULL)
+od_xl_patch(x, path, od = NULL, unprotect = FALSE)
 }
 \arguments{
 \item{x}{Data frame with columns \code{sheet}, \code{range}, and \code{new}}
@@ -12,6 +12,10 @@ od_xl_patch(x, path, od = NULL)
 \item{path}{The location in the Sharepoint drive}
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
+
+\item{unprotect}{If \code{TRUE}, temporarily unprotects affected worksheets before
+patching and re-protects afterwards. Only works with passwordless
+protection.}
 }
 \value{
 the ms_drive_item (invisibly)

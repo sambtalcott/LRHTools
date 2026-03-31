@@ -4,7 +4,14 @@
 \alias{od_xl_append}
 \title{Append rows to a named Excel Table}
 \usage{
-od_xl_append(x, path, table, od = NULL, check_columns = TRUE)
+od_xl_append(
+  x,
+  path,
+  table,
+  od = NULL,
+  check_columns = TRUE,
+  unprotect = FALSE
+)
 }
 \arguments{
 \item{x}{Data frame of rows to append (columns must match the table)}
@@ -17,6 +24,10 @@ od_xl_append(x, path, table, od = NULL, check_columns = TRUE)
 
 \item{check_columns}{Should the script check that column names are identical
 before appending?}
+
+\item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
+appending and re-protects afterwards. Only works with passwordless
+protection.}
 }
 \value{
 the ms_drive_item (invisibly)
