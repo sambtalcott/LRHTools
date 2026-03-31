@@ -561,9 +561,7 @@ xl_protect <- function(item, sheets) {
   for (s in sheets_enc) {
     item$do_operation(
       stringr::str_glue("workbook/worksheets('{s}')/protection/protect"),
-      http_verb = "POST",
-      body = list(options = list()),
-      encode = "json"
+      http_verb = "POST"
     )
   }
 }
