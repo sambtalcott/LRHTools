@@ -615,9 +615,9 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
 
   # Error checking: table
   wb <- od_read(path, od = od, type = "wb")
-  if (!table %in% wb$get_tables()$tab_name) cli::cli_abort(c(
+  if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
     "x" = "No table with the name {.val {table}} found in file.",
-    "i" = "Found tables {.val {wb$get_tables()$tab_name}}"
+    "i" = "Found tables {.val {wb$tables$tab_name}}"
   ))
   cur_cols <- wb$to_df(named_region = table)
   if (check_columns && !identical(colnames(x), colnames(cur_cols))) {
