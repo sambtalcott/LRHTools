@@ -1,4 +1,9 @@
 
+# Helper to quote column names for SQL (handles spaces and special characters)
+quote_col <- function(x) {
+  x <- as.character(x)
+  paste0('"', x, '"')
+}
 
 #' Flattening function for use in dbplyr piplines
 #'
@@ -13,9 +18,8 @@
 #' @export
 #' @md
 sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
-  col_name <- as.character(substitute(x))
-  order_col <- order_by %||% col_name  # order by the column itself if not specified
-  order_col <- as.character(substitute(order_col))
+  col_name <- quote_col(rlang::enexpr(x))
+  order_col <- if (!is.null(order_by)) quote_col(rlang::enexpr(order_by)) else col_name
 
   distinct_sql <- if (distinct) "DISTINCT " else ""
 
@@ -34,7 +38,7 @@ sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
 #' @export
 #' @md
 sql_as_date <- function(x, tz = "America/New_York") {
-  col_name <- rlang::enexpr(x)
+  col_name <- quote_col(rlang::enexpr(x))
   dplyr::sql(glue::glue(
       "CAST({col_name} AT TIME ZONE '{tz}' AS DATE)"
   ))
@@ -47,11 +51,12 @@ sql_as_date <- function(x, tz = "America/New_York") {
 #' @param x column with date string (ce_result_value)
 #' @param tz Timezone (for date-times)
 #'
-#' @returns a `sql()` CAST statement
+#' @returns `sql_ce_dt_tm()` and `sql_ce_date()` return `sql()` statements;
+#'   `ce_dt_tm()` and `ce_date()` return parsed date/datetime vectors.
 #' @export
 #' @md
 sql_ce_dt_tm <- function(x, tz = "America/New_York") {
-  col_name <- rlang::enexpr(x)
+  col_name <- quote_col(rlang::enexpr(x))
   dplyr::sql(glue::glue(
     "STRPTIME(SUBSTR({col_name}, 3, 14) || '{tz}', '%Y%m%d%H%M%S%Z')"
   ))
@@ -59,8 +64,20 @@ sql_ce_dt_tm <- function(x, tz = "America/New_York") {
 
 #' @rdname sql_ce_dt_tm
 #' @export
+ce_dt_tm <- function(x, tz = "America/New_York") {
+  lubridate::ymd_hms(substr(x, 3, 16), tz = tz)
+}
+
+#' @rdname sql_ce_dt_tm
+#' @export
+ce_date <- function(x) {
+  lubridate::ymd(substr(x, 3, 10))
+}
+
+#' @rdname sql_ce_dt_tm
+#' @export
 sql_ce_date <- function(x) {
-  col_name <- rlang::enexpr(x)
+  col_name <- quote_col(rlang::enexpr(x))
   dplyr::sql(glue::glue(
     "STRPTIME(SUBSTR({col_name}, 3, 8), '%Y%m%d')::DATE"
   ))
@@ -80,10 +97,10 @@ sql_ce_date <- function(x) {
 #' @md
 sql_age <- function(dt, dob) {
 
-  dt <- as.character(substitute(dt))
-  dob <- as.character(substitute(dob))
+  dt <- quote_col(rlang::enexpr(dt))
+  dob <- quote_col(rlang::enexpr(dob))
 
-  dplyr::sql(stringr::str_glue(
+  dplyr::sql(glue::glue(
     "DATEDIFF('year', {dob}, {dt}) -
     CASE WHEN STRFTIME({dt}, '%m-%d') < STRFTIME({dob}, '%m-%d') THEN 1 ELSE 0 END"
   ))

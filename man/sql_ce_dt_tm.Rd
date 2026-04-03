@@ -2,10 +2,16 @@
 % Please edit documentation in R/sql.R
 \name{sql_ce_dt_tm}
 \alias{sql_ce_dt_tm}
+\alias{ce_dt_tm}
+\alias{ce_date}
 \alias{sql_ce_date}
 \title{Process DA-2 Date Strings}
 \usage{
 sql_ce_dt_tm(x, tz = "America/New_York")
+
+ce_dt_tm(x, tz = "America/New_York")
+
+ce_date(x)
 
 sql_ce_date(x)
 }
@@ -15,7 +21,8 @@ sql_ce_date(x)
 \item{tz}{Timezone (for date-times)}
 }
 \value{
-a \code{sql()} CAST statement
+\code{sql_ce_dt_tm()} and \code{sql_ce_date()} return \code{sql()} statements;
+\code{ce_dt_tm()} and \code{ce_date()} return parsed date/datetime vectors.
 }
 \description{
 These strings take the form of '0:2025112718300000:0.000000:126:0'
