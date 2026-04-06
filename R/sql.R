@@ -1,6 +1,7 @@
 
 # Helper to quote column names for SQL (handles spaces and special characters)
 quote_col <- function(x) {
+  if (inherits(x, "sql")) return(x)
   x <- as.character(x)
   paste0('"', x, '"')
 }
@@ -9,7 +10,7 @@ quote_col <- function(x) {
 #'
 #' Use with the `!!` operator to return the sql statement before translation
 #'
-#' @param x values to aggregate
+#' @param x values to aggregate. Can also be a sql statement wrapped in sql()
 #' @param sep Separator. Defaults to "; "
 #' @param distinct Should values be made distinct?
 #' @param order_by values to order by. Defaults to `x`
@@ -18,8 +19,11 @@ quote_col <- function(x) {
 #' @export
 #' @md
 sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
-  col_name <- quote_col(rlang::enexpr(x))
-  order_col <- if (!is.null(order_by)) quote_col(rlang::enexpr(order_by)) else col_name
+  x <- rlang::enexpr(x)
+  col_name <- if (rlang::is_call(x)) quote_col(eval(x)) else quote_col(x)
+
+  order_by <- rlang::enexpr(order_by)
+  order_col <- if (!is.null(order_by)) quote_col(order_by) else col_name
 
   distinct_sql <- if (distinct) "DISTINCT " else ""
 

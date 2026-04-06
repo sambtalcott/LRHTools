@@ -7,7 +7,7 @@
 sql_flatten(x, sep = "; ", distinct = TRUE, order_by = NULL)
 }
 \arguments{
-\item{x}{values to aggregate}
+\item{x}{values to aggregate. Can also be a sql statement wrapped in sql()}
 
 \item{sep}{Separator. Defaults to "; "}
 
