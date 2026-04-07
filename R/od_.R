@@ -728,7 +728,7 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
                           names_to = c("col", "name"),
                           values_transform = as.character) |>
       tidyr::pivot_wider() |>
-      dplyr::filter(old != new)
+      dplyr::filter(is.na(old) != is.na(new) | old != new)
 
     # Get table metadata for sheet name and cell range
     tab_info <- wb$tables[wb$tables$tab_name == table, ]
