@@ -7,12 +7,17 @@
 \usage{
 xl_unprotect(item, sheets)
 
-xl_protect(item, sheets)
+xl_protect(item, sheets, options = list(allowAutoFilter = TRUE))
 }
 \arguments{
 \item{item}{An ms_drive_item for the workbook}
 
 \item{sheets}{Character vector of sheet names to unprotect}
+
+\item{options}{Named list of protection options specifying what users are
+allowed to do on the protected sheet (e.g. `list(allowAutoFilter = TRUE)`).
+See \url{https://learn.microsoft.com/en-us/graph/api/worksheetprotection-protect#request-body}
+for available options.}
 }
 \value{
 NULL (called for side effects)

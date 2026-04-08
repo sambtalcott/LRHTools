@@ -556,12 +556,18 @@ xl_unprotect <- function(item, sheets) {
 }
 
 #' @rdname xl_unprotect
-xl_protect <- function(item, sheets) {
+#' @param options Named list of protection options specifying what users are
+#'   allowed to do on the protected sheet (e.g. `list(allowAutoFilter = TRUE)`).
+#'   See \url{https://learn.microsoft.com/en-us/graph/api/worksheetprotection-protect#request-body}
+#'   for available options.
+xl_protect <- function(item, sheets, options = list(allowAutoFilter = TRUE)) {
   sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
   for (s in sheets_enc) {
     item$do_operation(
       stringr::str_glue("workbook/worksheets('{s}')/protection/protect"),
-      http_verb = "POST"
+      http_verb = "POST",
+      body = list(options = options),
+      encode = "json"
     )
   }
 }
