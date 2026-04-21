@@ -806,8 +806,9 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
     return(invisible(NULL))
   }
 
-  # Coerce new values to character for the API
-  if (!is.character(x$new)) x$new <- as.character(x$new)
+  # Coerce new values to character for the API; NA becomes "" so Graph clears
+  # the cell (JSON null would be interpreted as "no change").
+  x$new <- tidyr::replace_na(as.character(x$new), "")
 
   item <- od$get_item(path)
 
