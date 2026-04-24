@@ -888,7 +888,8 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
   # Find rows to remove (in table but not in x by id_cols)
   remove <- wb_df |>
     dplyr::mutate(index = dplyr::row_number() - 1L) |>
-    dplyr::anti_join(x, by = id_cols)
+    dplyr::anti_join(x, by = id_cols) |>
+    tibble::as_tibble()
 
   list(append = append, patch = patch, remove = remove)
 }
