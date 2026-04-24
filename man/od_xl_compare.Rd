@@ -17,7 +17,19 @@ od_xl_compare(x, path, table, id_cols, od = NULL, wb_types = NULL)
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
 
-\item{wb_types}{Used for [openxlsx2::wb_to_df()] `types` parameter.}
+\item{wb_types}{Named integer vector passed to \code{\link[openxlsx2:wb_to_df]{openxlsx2::wb_to_df()}} as
+its \code{types} parameter. Names are column names; values specify the target
+R type:
+\itemize{
+\item \code{0} — character
+\item \code{1} — numeric
+\item \code{2} — Date
+\item \code{3} — POSIXct (date-time)
+\item \code{4} — logical
+}
+
+Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named are
+auto-detected.}
 }
 \value{
 a list of (append, patch) for use with od_xl_append() and od_xl_patch()

@@ -600,6 +600,11 @@ graph_df_to_values <- function(df) {
 #' before appending?
 #' @param append_top If `TRUE`, new rows are inserted at the top of the table
 #'   (index 0) instead of the bottom. Default `FALSE`.
+#' @param clear_format If `TRUE` and `append_top = TRUE`, clears direct cell
+#'   formatting on the newly inserted rows after the insert. This undoes the
+#'   header-row style bleed that Graph API applies to rows inserted adjacent
+#'   to the header. Conditional formatting rules are unaffected. Ignored when
+#'   `append_top = FALSE`. Default `TRUE`.
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   appending and re-protects afterwards. Only works with passwordless
 #'   protection.
@@ -608,7 +613,8 @@ graph_df_to_values <- function(df) {
 #' @md
 #' @returns the ms_drive_item (invisibly)
 od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
-                         append_top = FALSE, unprotect = FALSE) {
+                         append_top = FALSE, clear_format = TRUE,
+                         unprotect = FALSE) {
 
   if (is.null(od)) od <- od()
 
@@ -665,6 +671,29 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
     body = body,
     encode = "json"
   )
+
+  # Clear the header-style bleed on top-inserted rows
+  if (append_top && clear_format) {
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    sheet <- wb$sheet_names[tab_info$tab_sheet]
+    tab_start <- sub(":.*", "", tab_info$tab_ref)
+    start_col <- openxlsx2::col2int(gsub("[0-9]", "", tab_start))
+    start_row <- as.integer(gsub("[A-Z]", "", tab_start))
+    end_col <- start_col + ncol(cur_cols) - 1L
+    range <- paste0(
+      openxlsx2::int2col(start_col), start_row + 1L, ":",
+      openxlsx2::int2col(end_col), start_row + nrow(x)
+    )
+    sheet_enc <- utils::URLencode(sheet, reserved = TRUE)
+    item$do_operation(
+      stringr::str_glue(
+        "workbook/worksheets('{sheet_enc}')/range(address='{range}')/clear"
+      ),
+      http_verb = "POST",
+      body = list(applyTo = "Formats"),
+      encode = "json"
+    )
+  }
 
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
   invisible(item)
@@ -759,10 +788,21 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #' @param table Name of the Excel Table
 #' @param id_cols Column name (or vector of names) to use as an id.
 #' @param od OneDrive (if null, will use the stored OneDrive)
-#' @param wb_types Used for [openxlsx2::wb_to_df()] `types` parameter.
+#' @param wb_types Named integer vector passed to [openxlsx2::wb_to_df()] as
+#'   its `types` parameter. Names are column names; values specify the target
+#'   R type:
+#'   * `0` — character
+#'   * `1` — numeric
+#'   * `2` — Date
+#'   * `3` — POSIXct (date-time)
+#'   * `4` — logical
+#'
+#'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named are
+#'   auto-detected.
 #'
 #' @returns a list of (append, patch) for use with od_xl_append() and od_xl_patch()
 #' @export
+#' @md
 od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
   if (is.null(od)) od <- od()
 
