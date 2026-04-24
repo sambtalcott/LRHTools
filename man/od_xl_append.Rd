@@ -11,7 +11,6 @@ od_xl_append(
   od = NULL,
   check_columns = TRUE,
   append_top = FALSE,
-  clear_format = TRUE,
   unprotect = FALSE
 )
 }
@@ -28,13 +27,10 @@ od_xl_append(
 before appending?}
 
 \item{append_top}{If \code{TRUE}, new rows are inserted at the top of the table
-(index 0) instead of the bottom. Default \code{FALSE}.}
-
-\item{clear_format}{If \code{TRUE} and \code{append_top = TRUE}, clears direct cell
-formatting on the newly inserted rows after the insert. This undoes the
-header-row style bleed that Graph API applies to rows inserted adjacent
-to the header. Conditional formatting rules are unaffected. Ignored when
-\code{append_top = FALSE}. Default \code{TRUE}.}
+(index 0) instead of the bottom. Note: Excel table styles typically bleed
+header formatting onto rows inserted adjacent to the header. For most
+use cases, appending at the bottom and then calling \code{\link[=od_xl_sort]{od_xl_sort()}} is
+cleaner. Default \code{FALSE}.}
 
 \item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
 appending and re-protects afterwards. Only works with passwordless

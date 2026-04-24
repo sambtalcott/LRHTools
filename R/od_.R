@@ -599,12 +599,10 @@ graph_df_to_values <- function(df) {
 #' @param check_columns Should the script check that column names are identical
 #' before appending?
 #' @param append_top If `TRUE`, new rows are inserted at the top of the table
-#'   (index 0) instead of the bottom. Default `FALSE`.
-#' @param clear_format If `TRUE` and `append_top = TRUE`, clears direct cell
-#'   formatting on the newly inserted rows after the insert. This undoes the
-#'   header-row style bleed that Graph API applies to rows inserted adjacent
-#'   to the header. Conditional formatting rules are unaffected. Ignored when
-#'   `append_top = FALSE`. Default `TRUE`.
+#'   (index 0) instead of the bottom. Note: Excel table styles typically bleed
+#'   header formatting onto rows inserted adjacent to the header. For most
+#'   use cases, appending at the bottom and then calling [od_xl_sort()] is
+#'   cleaner. Default `FALSE`.
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   appending and re-protects afterwards. Only works with passwordless
 #'   protection.
@@ -613,8 +611,7 @@ graph_df_to_values <- function(df) {
 #' @md
 #' @returns the ms_drive_item (invisibly)
 od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
-                         append_top = FALSE, clear_format = TRUE,
-                         unprotect = FALSE) {
+                         append_top = FALSE, unprotect = FALSE) {
 
   if (is.null(od)) od <- od()
 
@@ -672,29 +669,6 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
     encode = "json"
   )
 
-  # Clear the header-style bleed on top-inserted rows
-  if (append_top && clear_format) {
-    tab_info <- wb$tables[wb$tables$tab_name == table, ]
-    sheet <- wb$sheet_names[tab_info$tab_sheet]
-    tab_start <- sub(":.*", "", tab_info$tab_ref)
-    start_col <- openxlsx2::col2int(gsub("[0-9]", "", tab_start))
-    start_row <- as.integer(gsub("[A-Z]", "", tab_start))
-    end_col <- start_col + ncol(cur_cols) - 1L
-    range <- paste0(
-      openxlsx2::int2col(start_col), start_row + 1L, ":",
-      openxlsx2::int2col(end_col), start_row + nrow(x)
-    )
-    sheet_enc <- utils::URLencode(sheet, reserved = TRUE)
-    item$do_operation(
-      stringr::str_glue(
-        "workbook/worksheets('{sheet_enc}')/range(address='{range}')/clear"
-      ),
-      http_verb = "POST",
-      body = list(applyTo = "Formats"),
-      encode = "json"
-    )
-  }
-
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
   invisible(item)
 }
@@ -743,10 +717,19 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
   ))
   tab_cols <- colnames(wb$to_df(named_region = table))
   missing_cols <- setdiff(columns, tab_cols)
-  if (length(missing_cols) > 0) cli::cli_abort(c(
-    "x" = "Column{?s} {.val {missing_cols}} not found in table {.val {table}}",
-    "i" = "Table columns: {.val {tab_cols}}"
-  ))
+  if (length(missing_cols) > 0) {
+    msgs <- c(
+      "x" = "{qty(length(missing_cols))}Column{?s} {.val {missing_cols}} not found in table {.val {table}}",
+      "i" = "Available columns: {.val {tab_cols}}"
+    )
+    case_hits <- tab_cols[tolower(tab_cols) %in% tolower(missing_cols)]
+    if (length(case_hits) > 0) {
+      msgs <- c(msgs,
+        "i" = "Did you mean {.val {case_hits}}? Column names are case-sensitive."
+      )
+    }
+    cli::cli_abort(msgs)
+  }
 
   # Recycle desc to match columns
   if (length(desc) == 1) desc <- rep(desc, length(columns))
@@ -781,7 +764,17 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 
 #' Compare a dataframe to an existing spreadsheet
 #'
-#' Returns a list of (append, patch)
+#' Returns a list of (append, patch, remove) for syncing an Excel Table to `x`.
+#' `remove` contains rows present in the table but missing from `x` (matched by
+#' `id_cols`) and can be passed to [od_xl_remove()] to delete them.
+#'
+#' # Recommended application order
+#' Apply the results in this order to avoid stale references:
+#' 1. [od_xl_patch()] — uses absolute cell addresses captured at compare time,
+#'    so it must run before any operation that moves rows.
+#' 2. [od_xl_remove()] — row indices are still valid after patch.
+#' 3. [od_xl_append()] — adding rows doesn't affect existing data-row positions.
+#' 4. [od_xl_sort()] — optional, last, once the row set is final.
 #'
 #' @param x Data frame of rows to append (columns must match the table)
 #' @param path The location in the Sharepoint drive
@@ -800,7 +793,9 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named are
 #'   auto-detected.
 #'
-#' @returns a list of (append, patch) for use with od_xl_append() and od_xl_patch()
+#' @returns a list of (append, patch, remove) for use with `od_xl_append()`,
+#'   `od_xl_patch()`, and `od_xl_remove()`. `remove` has all table columns plus
+#'   an `index` column (0-based row index within the table's data rows).
 #' @export
 #' @md
 od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
@@ -890,7 +885,81 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
   }
 
 
-  list(append = append, patch = patch)
+  # Find rows to remove (in table but not in x by id_cols)
+  remove <- wb_df |>
+    dplyr::mutate(index = dplyr::row_number() - 1L) |>
+    dplyr::anti_join(x, by = id_cols)
+
+  list(append = append, patch = patch, remove = remove)
+}
+
+#' Remove rows from a named Excel Table
+#'
+#' Deletes rows from a named Excel Table by row index. Designed to work with
+#' the `remove` output of [od_xl_compare()], but can also be called directly
+#' with a data frame containing an `index` column (0-based row indices within
+#' the table's data rows).
+#'
+#' Rows are deleted highest-index-first so that earlier deletions don't shift
+#' the indices of pending ones.
+#'
+#' @param x Data frame with an `index` column (0-based). Extra columns are
+#'   ignored (so output of `od_xl_compare()$remove` works directly).
+#' @param path The location in the Sharepoint drive
+#' @param table Name of the Excel Table
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
+#'   removing and re-protects afterwards. Only works with passwordless
+#'   protection.
+#'
+#' @returns the ms_drive_item (invisibly)
+#' @export
+#' @md
+od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
+
+  if (is.null(od)) od <- od()
+
+  # Error checking: path
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_remove()} can only be used on .xlsx files"
+  ))
+
+  # Error checking: x
+  if (!"index" %in% colnames(x)) cli::cli_abort(c(
+    "x" = "{.var x} must have an {.val index} column (0-based row indices)"
+  ))
+  if (nrow(x) == 0) {
+    cli::cli_alert_info("No rows to remove")
+    return(invisible(od$get_item(path)))
+  }
+
+  item <- od$get_item(path)
+
+  # Unprotect sheet if needed
+  if (unprotect) {
+    wb <- od_read(path, od = od, type = "wb")
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    sheet <- wb$sheet_names[tab_info$tab_sheet]
+    xl_unprotect(item, sheet)
+    on.exit(xl_protect(item, sheet), add = TRUE)
+  }
+
+  # Delete highest-index-first to avoid index shifting
+  indices <- sort(unique(x$index), decreasing = TRUE)
+  table_enc <- utils::URLencode(table, reserved = TRUE)
+
+  purrr::walk(indices, \(i) {
+    item$do_operation(
+      stringr::str_glue("workbook/tables('{table_enc}')/rows/itemAt(index={i})"),
+      http_verb = "DELETE"
+    )
+  }, .progress = "Removing rows")
+
+  cli::cli_alert_success("Removed {length(indices)} row{?s} from table {.val {table}}")
+  invisible(item)
 }
 
 #' Patch cells through the coauthoring API

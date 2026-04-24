@@ -32,8 +32,23 @@ Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named are
 auto-detected.}
 }
 \value{
-a list of (append, patch) for use with od_xl_append() and od_xl_patch()
+a list of (append, patch, remove) for use with \code{od_xl_append()},
+\code{od_xl_patch()}, and \code{od_xl_remove()}. \code{remove} has all table columns plus
+an \code{index} column (0-based row index within the table's data rows).
 }
 \description{
-Returns a list of (append, patch)
+Returns a list of (append, patch, remove) for syncing an Excel Table to \code{x}.
+\code{remove} contains rows present in the table but missing from \code{x} (matched by
+\code{id_cols}) and can be passed to \code{\link[=od_xl_remove]{od_xl_remove()}} to delete them.
 }
+\section{Recommended application order}{
+Apply the results in this order to avoid stale references:
+\enumerate{
+\item \code{\link[=od_xl_patch]{od_xl_patch()}} — uses absolute cell addresses captured at compare time,
+so it must run before any operation that moves rows.
+\item \code{\link[=od_xl_remove]{od_xl_remove()}} — row indices are still valid after patch.
+\item \code{\link[=od_xl_append]{od_xl_append()}} — adding rows doesn't affect existing data-row positions.
+\item \code{\link[=od_xl_sort]{od_xl_sort()}} — optional, last, once the row set is final.
+}
+}
+
