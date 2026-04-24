@@ -589,7 +589,8 @@ graph_df_to_values <- function(df) {
 #' Append rows to a named Excel Table
 #'
 #' The worksheet must contain a named Table (Insert > Table in Excel).
-#' New rows appear at the bottom. Works while the file is open.
+#' By default new rows appear at the bottom. Set `append_top = TRUE` to insert
+#' them at the top instead. Works while the file is open.
 #'
 #' @param x Data frame of rows to append (columns must match the table)
 #' @param path The location in the Sharepoint drive
@@ -597,6 +598,8 @@ graph_df_to_values <- function(df) {
 #' @param od OneDrive (if null, will use the stored OneDrive)
 #' @param check_columns Should the script check that column names are identical
 #' before appending?
+#' @param append_top If `TRUE`, new rows are inserted at the top of the table
+#'   (index 0) instead of the bottom. Default `FALSE`.
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   appending and re-protects afterwards. Only works with passwordless
 #'   protection.
@@ -605,7 +608,7 @@ graph_df_to_values <- function(df) {
 #' @md
 #' @returns the ms_drive_item (invisibly)
 od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
-                         unprotect = FALSE) {
+                         append_top = FALSE, unprotect = FALSE) {
 
   if (is.null(od)) od <- od()
 
@@ -653,14 +656,97 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
     on.exit(xl_protect(item, sheet), add = TRUE)
   }
 
+  body <- list(values = values)
+  if (append_top) body$index <- 0
+
   item$do_operation(
     stringr::str_glue("workbook/tables('{table_enc}')/rows/add"),
     http_verb = "POST",
-    body = list(values = values),
+    body = body,
     encode = "json"
   )
 
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
+  invisible(item)
+}
+
+#' Sort a named Excel Table
+#'
+#' Applies a persistent sort to a named Excel Table via the Microsoft Graph
+#' API. Column indices are resolved from the table's column names. Works while
+#' the file is open.
+#'
+#' @param path The location in the Sharepoint drive
+#' @param table Name of the Excel Table
+#' @param columns Character vector of column names to sort by, in priority
+#'   order.
+#' @param desc Logical; if `TRUE`, sort descending. Length 1 (applied to all
+#'   columns) or the same length as `columns`. Default `FALSE` (ascending).
+#' @param match_case Should the sort be case-sensitive? Default `FALSE`.
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
+#'   sorting and re-protects afterwards. Only works with passwordless
+#'   protection.
+#'
+#' @returns the ms_drive_item (invisibly)
+#' @export
+#' @md
+od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
+                       od = NULL, unprotect = FALSE) {
+
+  if (is.null(od)) od <- od()
+
+  # Error checking: path
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_sort()} can only be used on .xlsx files"
+  ))
+
+  item <- od$get_item(path)
+
+  # Error checking: table and resolve column indices
+  wb <- od_read(path, od = od, type = "wb")
+  if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
+    "x" = "No table with the name {.val {table}} found in file.",
+    "i" = "Found tables {.val {wb$tables$tab_name}}"
+  ))
+  tab_cols <- colnames(wb$to_df(named_region = table))
+  missing_cols <- setdiff(columns, tab_cols)
+  if (length(missing_cols) > 0) cli::cli_abort(c(
+    "x" = "Column{?s} {.val {missing_cols}} not found in table {.val {table}}",
+    "i" = "Table columns: {.val {tab_cols}}"
+  ))
+
+  # Recycle desc to match columns
+  if (length(desc) == 1) desc <- rep(desc, length(columns))
+  if (length(desc) != length(columns)) cli::cli_abort(c(
+    "x" = "{.var desc} must be length 1 or the same length as {.var columns}"
+  ))
+
+  fields <- purrr::map2(columns, desc, \(col, d) list(
+    key = match(col, tab_cols) - 1L,
+    ascending = !d
+  ))
+
+  # Unprotect sheet if needed
+  if (unprotect) {
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    sheet <- wb$sheet_names[tab_info$tab_sheet]
+    xl_unprotect(item, sheet)
+    on.exit(xl_protect(item, sheet), add = TRUE)
+  }
+
+  table_enc <- utils::URLencode(table, reserved = TRUE)
+  item$do_operation(
+    stringr::str_glue("workbook/tables('{table_enc}')/sort/apply"),
+    http_verb = "POST",
+    body = list(fields = fields, matchCase = match_case),
+    encode = "json"
+  )
+
+  cli::cli_alert_success("Sorted table {.val {table}} by {.val {columns}}")
   invisible(item)
 }
 

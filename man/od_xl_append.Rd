@@ -10,6 +10,7 @@ od_xl_append(
   table,
   od = NULL,
   check_columns = TRUE,
+  append_top = FALSE,
   unprotect = FALSE
 )
 }
@@ -25,6 +26,9 @@ od_xl_append(
 \item{check_columns}{Should the script check that column names are identical
 before appending?}
 
+\item{append_top}{If \code{TRUE}, new rows are inserted at the top of the table
+(index 0) instead of the bottom. Default \code{FALSE}.}
+
 \item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
 appending and re-protects afterwards. Only works with passwordless
 protection.}
@@ -34,5 +38,6 @@ the ms_drive_item (invisibly)
 }
 \description{
 The worksheet must contain a named Table (Insert > Table in Excel).
-New rows appear at the bottom. Works while the file is open.
+By default new rows appear at the bottom. Set \code{append_top = TRUE} to insert
+them at the top instead. Works while the file is open.
 }
