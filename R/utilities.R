@@ -13,6 +13,24 @@ check_folder <- function(path) {
   return(path)
 }
 
+#' Normalize names for similarity comparison
+#'
+#' Strips common credential abbreviations / punctuation, lowercases, then
+#' splits on spaces and re-joins the parts in sorted order so first/last
+#' name order doesn't affect comparisons.
+#'
+#' @param x character vector
+#' @returns character vector of normalized names
+#' @noRd
+normalize_names <- function(x) {
+  # Remove credentials before lowercasing — regex is case-sensitive and includes
+  # mixed-case tokens like "EdD"
+  x <- stringr::str_remove_all(x, "(\\b(MD|DO|APRN|PA|LICSW|EdD|MA|CCMA|RN|LPN|CRNA|LNA)\\b)|,|-|'")
+  x <- stringr::str_to_lower(x)
+  parts <- strsplit(x, " ", fixed = TRUE)
+  vapply(parts, \(p) paste0(sort(p), collapse = ""), character(1))
+}
+
 #' Name similarity
 #'
 #' Get the similarity of two vectors of names after removing common abbreviations
@@ -24,11 +42,7 @@ check_folder <- function(path) {
 #' @returns a vector of similarities
 #' @export
 name_sim <- function(a, b) {
-  tibble::tibble(a = a, b = b) |>
-    dplyr::mutate_all(~stringr::str_to_lower(stringr::str_remove_all(.x, "(\\b(MD|DO|APRN|PA|LICSW|EdD|MA|CCMA|RN|LPN|CRNA|LNA)\\b)|,|-|'"))) |>
-    dplyr::mutate_all(~purrr::map_chr(.x, \(v) stringr::str_flatten(sort(str_split_1(v, " "))))) |>
-    dplyr::mutate(sim = stringdist::stringsim(a, b)) |>
-    dplyr::pull(sim)
+  stringdist::stringsim(normalize_names(a), normalize_names(b))
 }
 
 #' Check names against current aliases
@@ -64,16 +78,23 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
   # Generate similarity df
   new_names <- setdiff(names, alias$name_new)
 
+  # Normalize each unique name once, then look up per pair instead of
+  # re-normalizing for every grid row
+  all_names <- unique(c(alias$name_new, new_names))
+  norm_lookup <- normalize_names(all_names)
+  names(norm_lookup) <- all_names
+  pair_sim <- function(a, b) stringdist::stringsim(norm_lookup[a], norm_lookup[b])
+
   a_a <- name_grid(alias$name_new) |>
-    dplyr::mutate(sim = name_sim(a, b),
+    dplyr::mutate(sim = pair_sim(a, b),
                   type = "Alias - Alias Check (Fix Manually)")
 
   n_a <- name_grid(new_names, alias$name_new) |>
-    dplyr::mutate(sim = name_sim(a, b),
+    dplyr::mutate(sim = pair_sim(a, b),
                   type = "Name - Alias Check (ALWAYS choose b)")
 
   n_n <- name_grid(new_names) |>
-    dplyr::mutate(sim = name_sim(a, b),
+    dplyr::mutate(sim = pair_sim(a, b),
                   type = "Name - Name Check (Choose a or b)")
 
   final <- dplyr::bind_rows(a_a, n_a, n_n) |>
