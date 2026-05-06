@@ -25,7 +25,7 @@ check_folder <- function(path) {
 #' @export
 name_sim <- function(a, b) {
   tibble::tibble(a = a, b = b) |>
-    dplyr::mutate_all(~stringr::str_to_lower(stringr::str_remove_all(.x, "MD|DO|APRN|PA|LICSW|EdD|,|-|'"))) |>
+    dplyr::mutate_all(~stringr::str_to_lower(stringr::str_remove_all(.x, "(\\b(MD|DO|APRN|PA|LICSW|EdD|MA|CCMA|RN|LPN|CRNA|LNA)\\b)|,|-|'"))) |>
     dplyr::mutate_all(~purrr::map_chr(.x, \(v) stringr::str_flatten(sort(str_split_1(v, " "))))) |>
     dplyr::mutate(sim = stringdist::stringsim(a, b)) |>
     dplyr::pull(sim)
@@ -96,7 +96,7 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
                        name_new = dplyr::recode_values(keep, "a" ~ a, "b" ~ b))
 
     append_duckdb(y2, table)
-    cli::cli_abort("{.val {table}} updated. Rerun the script that triggered this")
+    cli::cli_abort(c("v" = "{.val {table}} updated. Rerun the script that triggered this"))
   }
 
   if (print > 0) {
