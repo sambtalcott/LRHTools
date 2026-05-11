@@ -60,6 +60,7 @@ ppt_lrh <- function(title = NULL, subtitle = NULL,
 #' @md
 #' @export
 ppt_d1 <- function(p, content, as_rvg = TRUE, notes = NULL) {
+  if (interactive()) try(print(content), silent = TRUE)
   if (as_rvg) content <- ppt_as_dml(content)
   p <- p |>
     officer::add_slide("Data 1 Image") |>
@@ -74,6 +75,14 @@ ppt_d1 <- function(p, content, as_rvg = TRUE, notes = NULL) {
 #' @rdname ppt_d1
 #' @export
 ppt_d2 <- function(p, left, right, as_rvg = TRUE, notes = NULL) {
+  if (interactive()) {
+    if (inherits(left, "gg") && inherits(right, "gg")) {
+      try(print(patchwork::wrap_plots(left, right, nrow = 1)), silent = TRUE)
+    } else {
+      try(print(left), silent = TRUE)
+      try(print(right), silent = TRUE)
+    }
+  }
   if (as_rvg) {
     left <- ppt_as_dml(left)
     right <- ppt_as_dml(right)

@@ -41,6 +41,7 @@ Imports:
     glue,
     httr,
     officer,
+    patchwork,
     gt,
     magick,
     systemfonts,
