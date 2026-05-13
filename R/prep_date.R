@@ -36,9 +36,13 @@ prep_y <- function(file, date, fmt = "%Y", sep = ".") {
 #' months of the year so that the first displayed month of each year gets a year
 #' (e.g. "Jan 2024") and following months get only the month ("Feb")
 #'
-#' `lab_yq()` does the same, but for quarters.
+#' `lab_yq()` does the same, but for quarters. `lab_md()` works at the
+#' month/day level — the first displayed day of each month gets a month label
+#' (e.g. "Jan 01") and following days get only the day ("02").
 #'
 #' @param x A vector of dates or date/times
+#' @param fmt Format string for the month label in `lab_md()`. Defaults to
+#'   `"%b"` (3-letter abbreviation). See [strptime] for details.
 #'
 #' @returns A character vector for displays
 #' @export
@@ -55,6 +59,23 @@ lab_ym <- function(x) {
     as.Date()
 
   dplyr::if_else(x %in% first_dates, format(x, "%b\n%Y"), format(x, "%b"))
+
+}
+
+#' @export
+#' @rdname lab_ym
+lab_md <- function(x, fmt = "%b") {
+
+  if (!identical(sort(x[!is.na(x)]), x[!is.na(x)])) {
+    cli::cli_abort("`lab_md()` expects a sorted vector of dates")
+  }
+
+  first_dates <- split(x, format(x, "%Y-%m")) |>
+    purrr::map(1) |>
+    unlist(use.names = FALSE) |>
+    as.Date()
+
+  dplyr::if_else(x %in% first_dates, format(x, paste0(fmt, "\n%d")), format(x, "%d"))
 
 }
 

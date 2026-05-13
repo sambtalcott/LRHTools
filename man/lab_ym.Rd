@@ -2,15 +2,21 @@
 % Please edit documentation in R/prep_date.R
 \name{lab_ym}
 \alias{lab_ym}
+\alias{lab_md}
 \alias{lab_yq}
 \title{Format display months for plots}
 \usage{
 lab_ym(x)
 
+lab_md(x, fmt = "\%b")
+
 lab_yq(x)
 }
 \arguments{
 \item{x}{A vector of dates or date/times}
+
+\item{fmt}{Format string for the month label in \code{lab_md()}. Defaults to
+\code{"\%b"} (3-letter abbreviation). See \link{strptime} for details.}
 }
 \value{
 A character vector for displays
@@ -21,5 +27,7 @@ months of the year so that the first displayed month of each year gets a year
 (e.g. "Jan 2024") and following months get only the month ("Feb")
 }
 \details{
-\code{lab_yq()} does the same, but for quarters.
+\code{lab_yq()} does the same, but for quarters. \code{lab_md()} works at the
+month/day level — the first displayed day of each month gets a month label
+(e.g. "Jan 01") and following days get only the day ("02").
 }
