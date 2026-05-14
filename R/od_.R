@@ -1032,6 +1032,81 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
   invisible(item)
 }
 
+#' Sync a data frame to a named Excel Table on OneDrive
+#'
+#' Convenience wrapper around [od_xl_compare()] + [od_xl_patch()] +
+#' (optionally) [od_xl_remove()] + [od_xl_append()]. Works while the file is
+#' open in Excel.
+#'
+#' Auto-coerces types in `x` that won't survive the compare:
+#' * factor columns become character
+#' * `difftime`/`hms`/`Duration` columns become numeric (seconds)
+#'
+#' Auto-infers `wb_types` from `x`'s column classes (POSIXct=3, Date=2,
+#' logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
+#' Entries in `wb_types` override the auto-inference for those columns, so
+#' callers can correct a single odd column without re-listing the rest.
+#'
+#' @param x Data frame to sync to the table
+#' @param path The location in the Sharepoint drive
+#' @param id_cols Column name (or vector of names) to use as an id
+#' @param od OneDrive (if null, will use the stored OneDrive)
+#' @param table Name of the Excel Table. Default `"Table1"`.
+#' @param remove If `TRUE`, also remove rows present in the table but missing
+#'   from `x` (matched by `id_cols`). Default `FALSE` (additive sync — matches
+#'   the common case where the workbook retains history).
+#' @param unprotect If `TRUE`, temporarily unprotects affected worksheets
+#'   before each operation and re-protects afterwards. Only works with
+#'   passwordless protection.
+#' @param wb_types Named list/vector of openxlsx2 type codes that override the
+#'   auto-inferred types. Values: `0` (character), `1` (numeric), `2` (Date),
+#'   `3` (POSIXct), `4` (logical). Columns not named here use the auto-inferred
+#'   type from `x`.
+#'
+#' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
+#'   remove)`).
+#' @export
+#' @md
+od_xl_sync <- function(x, path, id_cols, od = NULL, table = "Table1",
+                       remove = FALSE, unprotect = FALSE, wb_types = NULL) {
+
+  # Coerce types that won't survive the compare's anti_join
+  x <- dplyr::mutate(
+    x,
+    dplyr::across(dplyr::where(is.factor), as.character),
+    dplyr::across(
+      dplyr::where(\(v) inherits(v, c("difftime", "hms", "Duration"))),
+      as.numeric
+    )
+  )
+
+  # Auto-infer wb_types, then layer user overrides on top
+  auto <- purrr::imap(x, \(v, n) {
+    if (lubridate::is.POSIXct(v)) 3L
+    else if (lubridate::is.Date(v)) 2L
+    else if (is.logical(v)) 4L
+    else if (is.numeric(v)) 1L
+    else NULL
+  }) |> purrr::compact()
+
+  if (!is.null(wb_types)) {
+    wb_types <- as.list(wb_types)
+    for (nm in names(wb_types)) auto[[nm]] <- wb_types[[nm]]
+  }
+
+  cmp <- od_xl_compare(x, path, table = table, id_cols = id_cols,
+                       wb_types = auto, od = od)
+  od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect)
+  if (remove) {
+    od_xl_remove(cmp$remove, path, table = table, od = od,
+                 unprotect = unprotect)
+  }
+  od_xl_append(cmp$append, path, table = table, od = od,
+               unprotect = unprotect)
+
+  invisible(cmp)
+}
+
 
 #' @export
 #' @rdname od_read
