@@ -47,15 +47,3 @@ Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code
 (optionally) \code{\link[=od_xl_remove]{od_xl_remove()}} + \code{\link[=od_xl_append]{od_xl_append()}}. Works while the file is
 open in Excel.
 }
-\details{
-Auto-coerces types in \code{x} that won't survive the compare:
-\itemize{
-\item factor columns become character
-\item \code{difftime}/\code{hms}/\code{Duration} columns become numeric (seconds)
-}
-
-Auto-infers \code{wb_types} from \code{x}'s column classes (POSIXct=3, Date=2,
-logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
-Entries in \code{wb_types} override the auto-inference for those columns, so
-callers can correct a single odd column without re-listing the rest.
-}

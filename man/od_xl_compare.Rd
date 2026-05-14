@@ -4,14 +4,22 @@
 \alias{od_xl_compare}
 \title{Compare a dataframe to an existing spreadsheet}
 \usage{
-od_xl_compare(x, path, table, id_cols, od = NULL, wb_types = NULL)
+od_xl_compare(
+  x,
+  path,
+  table = "Table1",
+  id_cols,
+  od = NULL,
+  wb_types = NULL,
+  coerce_tz = "America/New_York"
+)
 }
 \arguments{
 \item{x}{Data frame of rows to append (columns must match the table)}
 
 \item{path}{The location in the Sharepoint drive}
 
-\item{table}{Name of the Excel Table}
+\item{table}{Name of the Excel Table. Defaults to "Table1"}
 
 \item{id_cols}{Column name (or vector of names) to use as an id.}
 
@@ -30,6 +38,9 @@ R type:
 
 Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named are
 auto-detected.}
+
+\item{coerce_tz}{What timezone should the workbook date-times be coerced to?
+Set to NULL to not coerce.}
 }
 \value{
 a list of (append, patch, remove) for use with \code{od_xl_append()},
@@ -50,5 +61,18 @@ so it must run before any operation that moves rows.
 \item \code{\link[=od_xl_append]{od_xl_append()}} — adding rows doesn't affect existing data-row positions.
 \item \code{\link[=od_xl_sort]{od_xl_sort()}} — optional, last, once the row set is final.
 }
+
+Auto-coerces types in \code{x} that won't survive the compare:
+\itemize{
+\item factor columns become character
+\item \code{difftime}/\code{hms}/\code{Duration} columns become numeric (seconds)
+}
+
+Auto-coerces date-times in path to ET
+
+Auto-infers \code{wb_types} from \code{x}'s column classes (POSIXct=3, Date=2,
+logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
+Entries in \code{wb_types} override the auto-inference for those columns, so
+callers can correct a single odd column without re-listing the rest.
 }
 

@@ -776,9 +776,20 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #' 3. [od_xl_append()] — adding rows doesn't affect existing data-row positions.
 #' 4. [od_xl_sort()] — optional, last, once the row set is final.
 #'
+#' Auto-coerces types in `x` that won't survive the compare:
+#' * factor columns become character
+#' * `difftime`/`hms`/`Duration` columns become numeric (seconds)
+#'
+#' Auto-coerces date-times in path to ET
+#'
+#' Auto-infers `wb_types` from `x`'s column classes (POSIXct=3, Date=2,
+#' logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
+#' Entries in `wb_types` override the auto-inference for those columns, so
+#' callers can correct a single odd column without re-listing the rest.
+#'
 #' @param x Data frame of rows to append (columns must match the table)
 #' @param path The location in the Sharepoint drive
-#' @param table Name of the Excel Table
+#' @param table Name of the Excel Table. Defaults to "Table1"
 #' @param id_cols Column name (or vector of names) to use as an id.
 #' @param od OneDrive (if null, will use the stored OneDrive)
 #' @param wb_types Named integer vector passed to [openxlsx2::wb_to_df()] as
@@ -792,14 +803,40 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'
 #'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named are
 #'   auto-detected.
+#' @param coerce_tz What timezone should the workbook date-times be coerced to?
+#'   Set to NULL to not coerce.
 #'
 #' @returns a list of (append, patch, remove) for use with `od_xl_append()`,
 #'   `od_xl_patch()`, and `od_xl_remove()`. `remove` has all table columns plus
 #'   an `index` column (0-based row index within the table's data rows).
 #' @export
 #' @md
-od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
+od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_types = NULL,
+                          coerce_tz = "America/New_York") {
   if (is.null(od)) od <- od()
+
+  # Coerce types that won't survive the compare's anti_join
+  x <- dplyr::mutate(x,
+    dplyr::across(dplyr::where(is.factor), as.character),
+    dplyr::across(
+      dplyr::where(\(v) inherits(v, c("difftime", "hms", "Duration"))),
+      as.numeric
+    )
+  )
+
+  # Auto-infer wb_types, then layer user overrides on top
+  auto <- purrr::imap(x, \(v, n) {
+    if (lubridate::is.POSIXct(v)) 3L
+    else if (lubridate::is.Date(v)) 2L
+    else if (is.logical(v)) 4L
+    else if (is.numeric(v)) 1L
+    else NULL
+  }) |> purrr::compact()
+
+  if (!is.null(wb_types)) {
+    wb_types <- as.list(wb_types)
+    for (nm in names(wb_types)) auto[[nm]] <- wb_types[[nm]]
+  }
 
   # Error checking: path
   if (!od_exists(path, od)) cli::cli_abort(c(
@@ -817,11 +854,13 @@ od_xl_compare <- function(x, path, table, id_cols, od = NULL, wb_types = NULL) {
   ))
 
   # Error checking: column names
-  if (is.null(wb_types)) {
-    wb_df <- wb$to_df(named_region = table)
-  } else {
-    wb_df <- wb$to_df(named_region = table, types = wb_types)
+  wb_df <- wb$to_df(named_region = table, types = auto)
+  if (!is.null(coerce_tz)) {
+    wb_df <- wb_df |>
+      dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.POSIXct),
+                                  ~lubridate::force_tz(.x, tz = "America/New_York")))
   }
+
   if (!all(colnames(x) %in% colnames(wb_df))) {
     cli::cli_abort(c(
       "x" = "Column names from {.var x} don't match column names in table {.val {table}}",
@@ -1054,15 +1093,6 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 #' (optionally) [od_xl_remove()] + [od_xl_append()]. Works while the file is
 #' open in Excel.
 #'
-#' Auto-coerces types in `x` that won't survive the compare:
-#' * factor columns become character
-#' * `difftime`/`hms`/`Duration` columns become numeric (seconds)
-#'
-#' Auto-infers `wb_types` from `x`'s column classes (POSIXct=3, Date=2,
-#' logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
-#' Entries in `wb_types` override the auto-inference for those columns, so
-#' callers can correct a single odd column without re-listing the rest.
-#'
 #' @param x Data frame to sync to the table
 #' @param path The location in the Sharepoint drive
 #' @param id_cols Column name (or vector of names) to use as an id
@@ -1086,37 +1116,16 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 od_xl_sync <- function(x, path, id_cols, od = NULL, table = "Table1",
                        remove = FALSE, unprotect = FALSE, wb_types = NULL) {
 
-  # Coerce types that won't survive the compare's anti_join
-  x <- dplyr::mutate(
-    x,
-    dplyr::across(dplyr::where(is.factor), as.character),
-    dplyr::across(
-      dplyr::where(\(v) inherits(v, c("difftime", "hms", "Duration"))),
-      as.numeric
-    )
-  )
-
-  # Auto-infer wb_types, then layer user overrides on top
-  auto <- purrr::imap(x, \(v, n) {
-    if (lubridate::is.POSIXct(v)) 3L
-    else if (lubridate::is.Date(v)) 2L
-    else if (is.logical(v)) 4L
-    else if (is.numeric(v)) 1L
-    else NULL
-  }) |> purrr::compact()
-
-  if (!is.null(wb_types)) {
-    wb_types <- as.list(wb_types)
-    for (nm in names(wb_types)) auto[[nm]] <- wb_types[[nm]]
-  }
-
   cmp <- od_xl_compare(x, path, table = table, id_cols = id_cols,
-                       wb_types = auto, od = od)
+                       wb_types = wb_types, od = od)
+
   od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect)
+
   if (remove) {
     od_xl_remove(cmp$remove, path, table = table, od = od,
                  unprotect = unprotect)
   }
+
   od_xl_append(cmp$append, path, table = table, od = od,
                unprotect = unprotect)
 
