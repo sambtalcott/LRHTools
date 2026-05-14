@@ -12,7 +12,8 @@ od_xl_sync(
   table = "Table1",
   remove = FALSE,
   unprotect = FALSE,
-  wb_types = NULL
+  wb_types = NULL,
+  coerce_tz = "America/New_York"
 )
 }
 \arguments{
@@ -34,10 +35,12 @@ the common case where the workbook retains history).}
 before each operation and re-protects afterwards. Only works with
 passwordless protection.}
 
-\item{wb_types}{Named list/vector of openxlsx2 type codes that override the
-auto-inferred types. Values: \code{0} (character), \code{1} (numeric), \code{2} (Date),
-\code{3} (POSIXct), \code{4} (logical). Columns not named here use the auto-inferred
-type from \code{x}.}
+\item{wb_types}{Forwarded to \code{\link[=od_xl_compare]{od_xl_compare()}}. Named list/vector of
+openxlsx2 type codes overriding the auto-inferred types.}
+
+\item{coerce_tz}{Forwarded to \code{\link[=od_xl_compare]{od_xl_compare()}}. Timezone to coerce
+workbook POSIXct columns to. Default \code{"America/New_York"}; \code{NULL} to
+skip.}
 }
 \value{
 The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove)}).
@@ -46,4 +49,9 @@ The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(a
 Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code{\link[=od_xl_patch]{od_xl_patch()}} +
 (optionally) \code{\link[=od_xl_remove]{od_xl_remove()}} + \code{\link[=od_xl_append]{od_xl_append()}}. Works while the file is
 open in Excel.
+}
+\details{
+Type coercion of \code{x} (factors → character, difftime/hms/Duration →
+numeric), \code{wb_types} auto-inference, and \code{coerce_tz} handling are all
+done by \code{\link[=od_xl_compare]{od_xl_compare()}} — see its docs for details.
 }

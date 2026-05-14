@@ -803,8 +803,11 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'
 #'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named are
 #'   auto-detected.
-#' @param coerce_tz What timezone should the workbook date-times be coerced to?
-#'   Set to NULL to not coerce.
+#' @param coerce_tz Timezone to `force_tz()` workbook POSIXct columns to.
+#'   Defaults to `"America/New_York"` to match the typical tz tagging of
+#'   data pulled from DuckDB. Only the workbook (`wb_df`) side is coerced;
+#'   if `x`'s POSIXct columns are not already in this tz, coerce them
+#'   yourself before calling. Set to `NULL` to skip coercion entirely.
 #'
 #' @returns a list of (append, patch, remove) for use with `od_xl_append()`,
 #'   `od_xl_patch()`, and `od_xl_remove()`. `remove` has all table columns plus
@@ -814,6 +817,14 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_types = NULL,
                           coerce_tz = "America/New_York") {
   if (is.null(od)) od <- od()
+
+  # Error checking: path (fail fast before any expensive work)
+  if (!od_exists(path, od)) cli::cli_abort(c(
+    "x" = "File {.val {path}} does not exist in the current OneDrive"
+  ))
+  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
+    "x" = "{.var od_xl_compare()} can only be used on .xlsx files"
+  ))
 
   # Coerce types that won't survive the compare's anti_join
   x <- dplyr::mutate(x,
@@ -838,14 +849,6 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
     for (nm in names(wb_types)) auto[[nm]] <- wb_types[[nm]]
   }
 
-  # Error checking: path
-  if (!od_exists(path, od)) cli::cli_abort(c(
-    "x" = "File {.val {path}} does not exist in the current OneDrive"
-  ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_compare()} can only be used on .xlsx files"
-  ))
-
   # Error checking: table
   wb <- od_read(path, od = od, type = "wb")
   if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
@@ -858,7 +861,7 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
   if (!is.null(coerce_tz)) {
     wb_df <- wb_df |>
       dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.POSIXct),
-                                  ~lubridate::force_tz(.x, tz = "America/New_York")))
+                                  ~lubridate::force_tz(.x, tz = coerce_tz)))
   }
 
   if (!all(colnames(x) %in% colnames(wb_df))) {
@@ -1093,6 +1096,10 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 #' (optionally) [od_xl_remove()] + [od_xl_append()]. Works while the file is
 #' open in Excel.
 #'
+#' Type coercion of `x` (factors → character, difftime/hms/Duration →
+#' numeric), `wb_types` auto-inference, and `coerce_tz` handling are all
+#' done by [od_xl_compare()] — see its docs for details.
+#'
 #' @param x Data frame to sync to the table
 #' @param path The location in the Sharepoint drive
 #' @param id_cols Column name (or vector of names) to use as an id
@@ -1104,20 +1111,22 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 #' @param unprotect If `TRUE`, temporarily unprotects affected worksheets
 #'   before each operation and re-protects afterwards. Only works with
 #'   passwordless protection.
-#' @param wb_types Named list/vector of openxlsx2 type codes that override the
-#'   auto-inferred types. Values: `0` (character), `1` (numeric), `2` (Date),
-#'   `3` (POSIXct), `4` (logical). Columns not named here use the auto-inferred
-#'   type from `x`.
+#' @param wb_types Forwarded to [od_xl_compare()]. Named list/vector of
+#'   openxlsx2 type codes overriding the auto-inferred types.
+#' @param coerce_tz Forwarded to [od_xl_compare()]. Timezone to coerce
+#'   workbook POSIXct columns to. Default `"America/New_York"`; `NULL` to
+#'   skip.
 #'
 #' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
 #'   remove)`).
 #' @export
 #' @md
 od_xl_sync <- function(x, path, id_cols, od = NULL, table = "Table1",
-                       remove = FALSE, unprotect = FALSE, wb_types = NULL) {
+                       remove = FALSE, unprotect = FALSE, wb_types = NULL,
+                       coerce_tz = "America/New_York") {
 
   cmp <- od_xl_compare(x, path, table = table, id_cols = id_cols,
-                       wb_types = wb_types, od = od)
+                       wb_types = wb_types, od = od, coerce_tz = coerce_tz)
 
   od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect)
 

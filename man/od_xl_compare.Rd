@@ -39,8 +39,11 @@ R type:
 Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named are
 auto-detected.}
 
-\item{coerce_tz}{What timezone should the workbook date-times be coerced to?
-Set to NULL to not coerce.}
+\item{coerce_tz}{Timezone to \code{force_tz()} workbook POSIXct columns to.
+Defaults to \code{"America/New_York"} to match the typical tz tagging of
+data pulled from DuckDB. Only the workbook (\code{wb_df}) side is coerced;
+if \code{x}'s POSIXct columns are not already in this tz, coerce them
+yourself before calling. Set to \code{NULL} to skip coercion entirely.}
 }
 \value{
 a list of (append, patch, remove) for use with \code{od_xl_append()},
