@@ -864,6 +864,19 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
                                   ~lubridate::force_tz(.x, tz = coerce_tz)))
   }
 
+  # Normalize line endings before comparing. Excel stores in-cell breaks as
+  # bare "\n", but values arriving from sources like CSV/DuckDB often carry
+  # Windows "\r\n" (or a lone "\r"). The compare below is byte-exact, so
+  # without this every multi-line cell looks "changed" on every run, never
+  # converges, and the resulting patch can be huge enough to time out (504).
+  # `\r\n?` collapses both "\r\n" and a lone "\r" to "\n"; bare "\n" untouched.
+  normalize_eol <- function(df) {
+    dplyr::mutate(df, dplyr::across(dplyr::where(is.character),
+                                    ~gsub("\r\n?", "\n", .x)))
+  }
+  x <- normalize_eol(x)
+  wb_df <- normalize_eol(wb_df)
+
   if (!all(colnames(x) %in% colnames(wb_df))) {
     cli::cli_abort(c(
       "x" = "Column names from {.var x} don't match column names in table {.val {table}}",

@@ -151,6 +151,46 @@ test_that("compare returns empty patch when no changes", {
   expect_equal(nrow(result$patch), 0)
 })
 
+test_that("compare treats \\r\\n and \\n as equal (no spurious patch)", {
+  # Excel stores in-cell breaks as "\n"; CSV/DuckDB-sourced values often
+  # carry Windows "\r\n". Without line-ending normalization the byte-exact
+  # compare flags every multi-line cell every run, never converges, and the
+  # resulting patch can be large enough to time out (HTTP 504).
+  wb_df <- data.frame(id = 1:2, note = c("leave.\r\nNicole", "ok\rbye"))
+  wb <- make_test_wb(wb_df)
+
+  x <- data.frame(id = 1:2, note = c("leave.\nNicole", "ok\nbye"))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(x, "test.xlsx", "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(result$append), 0)
+  expect_equal(nrow(result$patch), 0)
+})
+
+test_that("compare still detects a real change in a multi-line cell", {
+  # Normalization must not mask genuine edits beyond the line ending.
+  wb_df <- data.frame(id = 1:2, note = c("leave.\r\nNicole", "keep"))
+  wb <- make_test_wb(wb_df)
+
+  x <- data.frame(id = 1:2, note = c("leave.\nNicole EDITED", "keep"))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(x, "test.xlsx", "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(result$patch), 1)
+  expect_equal(result$patch$col, "note")
+  expect_equal(result$patch$new, "leave.\nNicole EDITED")
+})
+
 test_that("compare fills missing columns with NA for appends", {
   wb_df <- data.frame(id = 1, val = "a", extra = "z")
   wb <- make_test_wb(wb_df)
