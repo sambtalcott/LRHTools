@@ -783,9 +783,14 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #' Auto-coerces date-times in path to ET
 #'
 #' Auto-infers `wb_types` from `x`'s column classes (POSIXct=3, Date=2,
-#' logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
-#' Entries in `wb_types` override the auto-inference for those columns, so
-#' callers can correct a single odd column without re-listing the rest.
+#' logical=4, numeric=1; character/unknown = 0, i.e. read as character).
+#' Character columns are forced to character on the workbook side rather
+#' than left to openxlsx2 auto-detect: a sparse text column (mostly blank
+#' in the workbook) would otherwise be guessed numeric and blow up the
+#' compare's `anti_join` with an incompatible-type error. Entries in
+#' `wb_types` override the auto-inference for those columns, so callers can
+#' correct a single odd column (e.g. force a real numeric/date) without
+#' re-listing the rest.
 #'
 #' @param x Data frame of rows to append (columns must match the table)
 #' @param path The location in the Sharepoint drive
@@ -801,8 +806,8 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'   * `3` — POSIXct (date-time)
 #'   * `4` — logical
 #'
-#'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named are
-#'   auto-detected.
+#'   Example: `c(id = 1, name = 0, entered = 3)`. Columns not named fall
+#'   back to the class auto-inference above (character by default).
 #' @param coerce_tz Timezone to `force_tz()` workbook POSIXct columns to.
 #'   Defaults to `"America/New_York"` to match the typical tz tagging of
 #'   data pulled from DuckDB. Only the workbook (`wb_df`) side is coerced;
@@ -835,14 +840,18 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
     )
   )
 
-  # Auto-infer wb_types, then layer user overrides on top
+  # Auto-infer wb_types, then layer user overrides on top.
+  # Character/unknown -> 0L (read as character on the workbook side). Leaving
+  # these to openxlsx2 auto-detect lets a sparse text column get guessed
+  # numeric, which then fails the compare's anti_join with an
+  # incompatible-type error. Callers can still override via `wb_types`.
   auto <- purrr::imap(x, \(v, n) {
     if (lubridate::is.POSIXct(v)) 3L
     else if (lubridate::is.Date(v)) 2L
     else if (is.logical(v)) 4L
     else if (is.numeric(v)) 1L
-    else NULL
-  }) |> purrr::compact()
+    else 0L
+  })
 
   if (!is.null(wb_types)) {
     wb_types <- as.list(wb_types)
