@@ -36,8 +36,8 @@ R type:
 \item \code{4} — logical
 }
 
-Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named are
-auto-detected.}
+Example: \code{c(id = 1, name = 0, entered = 3)}. Columns not named fall
+back to the class auto-inference above (character by default).}
 
 \item{coerce_tz}{Timezone to \code{force_tz()} workbook POSIXct columns to.
 Defaults to \code{"America/New_York"} to match the typical tz tagging of
@@ -74,8 +74,13 @@ Auto-coerces types in \code{x} that won't survive the compare:
 Auto-coerces date-times in path to ET
 
 Auto-infers \code{wb_types} from \code{x}'s column classes (POSIXct=3, Date=2,
-logical=4, numeric=1; character/unknown left to openxlsx2 auto-detect).
-Entries in \code{wb_types} override the auto-inference for those columns, so
-callers can correct a single odd column without re-listing the rest.
+logical=4, numeric=1; character/unknown = 0, i.e. read as character).
+Character columns are forced to character on the workbook side rather
+than left to openxlsx2 auto-detect: a sparse text column (mostly blank
+in the workbook) would otherwise be guessed numeric and blow up the
+compare's \code{anti_join} with an incompatible-type error. Entries in
+\code{wb_types} override the auto-inference for those columns, so callers can
+correct a single odd column (e.g. force a real numeric/date) without
+re-listing the rest.
 }
 
