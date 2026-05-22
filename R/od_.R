@@ -33,7 +33,6 @@ maintain_azure_tokens <- function(max_age_days = 6, verbose = TRUE) {
 
   # Only look at token files (hash filenames), not json config files
   token_files <- list.files(token_dir, pattern = "^[a-f0-9]+$", full.names = TRUE)
-  if (length(token_files) == 0) return(invisible(0L))
 
   removed <- 0L
 
@@ -63,11 +62,55 @@ maintain_azure_tokens <- function(max_age_days = 6, verbose = TRUE) {
     }
   }
 
-  if (verbose && removed > 0) {
-    cli::cli_alert_info("Removed {removed} stale Azure token{?s}")
+  # Drop any login-index entries that point to missing token files. Without
+  # this, AzureGraph::get_graph_login() walks the stale hash, hits a
+  # readRDS() error, and Microsoft365R falls through to a fresh device-code
+  # prompt — even when a valid cached token for the same scopes exists.
+  pruned <- prune_login_jsons(token_dir)
+
+  if (verbose && (removed > 0 || pruned > 0)) {
+    cli::cli_alert_info(
+      "Azure token cleanup: removed {removed} token{?s}, pruned {pruned} stale login entr{?y/ies}"
+    )
   }
 
   invisible(removed)
+}
+
+# Remove hashes from graph_logins.json / aadgraph_logins.json whose token
+# files no longer exist on disk. Returns the count of entries pruned.
+prune_login_jsons <- function(token_dir = AzureAuth::AzureR_dir()) {
+  if (!dir.exists(token_dir)) return(0L)
+
+  json_files <- c("graph_logins.json", "aadgraph_logins.json")
+  existing <- list.files(token_dir, pattern = "^[a-f0-9]+$")
+  pruned <- 0L
+
+  for (jf in json_files) {
+    path <- file.path(token_dir, jf)
+    if (!file.exists(path)) next
+
+    logins <- tryCatch(
+      jsonlite::fromJSON(path, simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+    if (is.null(logins) || length(logins) == 0) next
+
+    cleaned <- lapply(logins, function(hashes) {
+      hashes <- unlist(hashes, use.names = FALSE)
+      hashes[hashes %in% existing]
+    })
+
+    n_before <- sum(lengths(logins))
+    n_after  <- sum(lengths(cleaned))
+    if (n_after == n_before) next
+
+    pruned <- pruned + (n_before - n_after)
+    cleaned <- cleaned[lengths(cleaned) > 0]
+    jsonlite::write_json(cleaned, path, auto_unbox = FALSE, pretty = FALSE)
+  }
+
+  pruned
 }
 
 #' Set default onedrive for od_* functions

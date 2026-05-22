@@ -3,7 +3,7 @@
 \name{ppt_d1}
 \alias{ppt_d1}
 \alias{ppt_d2}
-\title{Add data slides to an \link[officer:officer]{officer::officer} ppt object}
+\title{Add data slides to an \link[officer:officer]{officer} ppt object}
 \usage{
 ppt_d1(p, content, as_rvg = TRUE, notes = NULL)
 

@@ -26,6 +26,11 @@ lrh_m365_login <- function(fn_name, ...) {
   azure_ns <- asNamespace("AzureAuth")
   m365_ns  <- asNamespace("Microsoft365R")
 
+  # Defensive: a single dangling hash in graph_logins.json poisons the whole
+  # cache lookup (AzureGraph::choose_token readRDS-errors on the missing file
+  # and Microsoft365R re-prompts). Sweep before every login attempt.
+  prune_login_jsons()
+
   # Patch AzureAuth's get_device_creds so that when a device-code prompt is
   # needed, we emit a structured marker line *before* AzureTokenDeviceCode's
   # internal cat(creds$message, "\n") runs. We also blank creds$message so the

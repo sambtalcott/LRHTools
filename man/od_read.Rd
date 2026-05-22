@@ -30,7 +30,7 @@ already exists and is locked? One of \code{prompt}, \code{rename}, or \code{erro
 returns the final path, invisibly (useful if using \code{rename})
 }
 \description{
-Based off of \code{\link[tntpr:sp_read]{tntpr::sp_read()}} and \code{\link[tntpr:sp_read]{tntpr::sp_write()}}.
+Based off of \code{\link[tntpr:sp_read]{tntpr::sp_read()}} and \code{\link[tntpr:sp_write]{tntpr::sp_write()}}.
 
 Read or write data to/from a OneDrive Folder. Can be used with default
 folder/drive set by \code{\link[=od_default]{od_default()}} or with a specified folder/drive.
