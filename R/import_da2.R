@@ -91,7 +91,7 @@ import_da2 <- function(file, guess_max = Inf, ddb_reference = NULL,
   # Clean names and fix dates
   y <- x |>
     janitor::clean_names() |>
-    dplyr::mutate(dplyr::across(dplyr::contains("dt_tm"),
+    dplyr::mutate(dplyr::across(dplyr::ends_with("_dt_tm"),
                                 \(x) parse_dt_tm(x, tz = tz)))
 
   # If there were issues importing x, attach them to y
