@@ -591,10 +591,10 @@ od_read_lines <- function(path, od, ...) {
 xl_unprotect <- function(item, sheets) {
   sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
   for (s in sheets_enc) {
-    item$do_operation(
+    graph_retry(\() item$do_operation(
       stringr::str_glue("workbook/worksheets('{s}')/protection/unprotect"),
       http_verb = "POST"
-    )
+    ))
   }
 }
 
@@ -606,12 +606,12 @@ xl_unprotect <- function(item, sheets) {
 xl_protect <- function(item, sheets, options = list(allowAutoFilter = TRUE)) {
   sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
   for (s in sheets_enc) {
-    item$do_operation(
+    graph_retry(\() item$do_operation(
       stringr::str_glue("workbook/worksheets('{s}')/protection/protect"),
       http_verb = "POST",
       body = list(options = options),
       encode = "json"
-    )
+    ))
   }
 }
 
@@ -627,6 +627,90 @@ graph_df_to_values <- function(df) {
     dplyr::mutate(dplyr::across(dplyr::everything(), \(x) tidyr::replace_na(as.character(x), ""))) |>
     purrr::pmap(list) |>
     purrr::map(unname)
+}
+
+# Connection-level (no HTTP status) failure substrings worth retrying.
+.graph_transient_network <- paste(
+  c("timeout was reached", "timed out", "could not resolve host",
+    "connection reset", "connection was reset", "recv failure",
+    "send failure", "empty reply from server", "failure when receiving data",
+    "operation too slow", "ssl connection", "connection refused"),
+  collapse = "|"
+)
+
+#' Extract an HTTP status code from a Graph/httr error condition
+#'
+#' AzureGraph surfaces the status in the condition message, e.g.
+#' `"Service Unavailable (HTTP 503). ..."`. Falls back to a structured status
+#' field if one is present.
+#'
+#' @param e A condition object.
+#' @returns Integer status code, or `NA_integer_` if none can be found.
+#' @md
+graph_http_status <- function(e) {
+  msg <- conditionMessage(e)
+  m <- regmatches(msg, regexpr("HTTP ?[0-9]{3}", msg))
+  if (length(m) == 1L) return(as.integer(gsub("\\D", "", m)))
+  st <- e$status_code %||% e$response$status_code %||% e$status
+  if (!is.null(st)) as.integer(st) else NA_integer_
+}
+
+#' Retry a Microsoft Graph call on transient failures
+#'
+#' Microsoft Graph intermittently returns transient HTTP errors (429 Too Many
+#' Requests, 500, 502, 503, 504) or drops the connection, especially during
+#' bursty per-cell / per-row workbook edits. Historically a single blip aborted
+#' the whole calling script and forced a full re-run. This wraps a Graph call
+#' and retries it with exponential backoff + jitter when the failure looks
+#' transient; genuine errors (400/401/403/404/409, etc.) are re-thrown
+#' immediately.
+#'
+#' @param .f A zero-argument function performing the Graph call, e.g.
+#'   `\() item$do_operation(...)`.
+#' @param idempotent Is the wrapped call safe to repeat? `TRUE` (default) for
+#'   value-setting writes (PATCH a cell, apply sort, (un)protect) that yield the
+#'   same end state if re-run. Set `FALSE` for non-idempotent mutations (row
+#'   add / delete): those retry ONLY on statuses where the request provably
+#'   never reached the backend (408/429/503) — never on 500/502/504 or bare
+#'   connection errors, where the mutation may already have landed and a retry
+#'   would duplicate or mis-target it.
+#' @param max_tries Maximum attempts including the first. Default 5.
+#' @param base_wait Base seconds for backoff (`base_wait * 2^(try - 1)`, capped
+#'   at `max_wait`, plus up to `base_wait` of random jitter). Default 1.5.
+#' @param max_wait Cap on a single backoff wait, in seconds. Default 32.
+#' @param quiet Suppress the per-retry warning message.
+#'
+#' @returns The value returned by `.f`.
+#' @md
+graph_retry <- function(.f, idempotent = TRUE, max_tries = 5L,
+                        base_wait = 1.5, max_wait = 32, quiet = FALSE) {
+
+  transient <- if (idempotent) c(408L, 429L, 500L, 502L, 503L, 504L) else c(408L, 429L, 503L)
+
+  for (try in seq_len(max_tries)) {
+    res <- tryCatch(.f(), error = function(e) e)
+    if (!inherits(res, "error")) return(res)
+
+    status <- graph_http_status(res)
+    is_transient <- if (!is.na(status)) {
+      status %in% transient
+    } else {
+      # No HTTP status => connection-level failure. Only safe to assume the
+      # request never landed (and so retry) for idempotent calls.
+      idempotent && grepl(.graph_transient_network, conditionMessage(res), ignore.case = TRUE)
+    }
+
+    if (!is_transient || try == max_tries) stop(res)
+
+    wait <- min(base_wait * 2^(try - 1), max_wait) + stats::runif(1, 0, base_wait)
+    if (!quiet) {
+      where <- if (!is.na(status)) paste0("HTTP ", status) else "connection error"
+      cli::cli_alert_warning(
+        "Graph call failed ({where}); retry {try}/{max_tries - 1L} in {round(wait, 1)}s"
+      )
+    }
+    Sys.sleep(wait)
+  }
 }
 
 #' Append rows to a named Excel Table
@@ -705,12 +789,12 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
   body <- list(values = values)
   if (append_top) body$index <- 0
 
-  item$do_operation(
+  graph_retry(\() item$do_operation(
     stringr::str_glue("workbook/tables('{table_enc}')/rows/add"),
     http_verb = "POST",
     body = body,
     encode = "json"
-  )
+  ), idempotent = FALSE)
 
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
   invisible(item)
@@ -794,12 +878,12 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
   }
 
   table_enc <- utils::URLencode(table, reserved = TRUE)
-  item$do_operation(
+  graph_retry(\() item$do_operation(
     stringr::str_glue("workbook/tables('{table_enc}')/sort/apply"),
     http_verb = "POST",
     body = list(fields = fields, matchCase = match_case),
     encode = "json"
-  )
+  ))
 
   cli::cli_alert_success("Sorted table {.val {table}} by {.val {columns}}")
   invisible(item)
@@ -1076,10 +1160,10 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
   table_enc <- utils::URLencode(table, reserved = TRUE)
 
   purrr::walk(indices, \(i) {
-    item$do_operation(
+    graph_retry(\() item$do_operation(
       stringr::str_glue("workbook/tables('{table_enc}')/rows/itemAt(index={i})"),
       http_verb = "DELETE"
-    )
+    ), idempotent = FALSE)
   }, .progress = "Removing rows")
 
   cli::cli_alert_success("Removed {length(indices)} row{?s} from table {.val {table}}")
@@ -1141,14 +1225,14 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
   x$sheet_enc <- utils::URLencode(x$sheet, reserved = TRUE)
 
   purrr::pmap(x, \(sheet_enc, range, new, ...) {
-    item$do_operation(
+    graph_retry(\() item$do_operation(
       stringr::str_glue(
         "workbook/worksheets('{sheet_enc}')/range(address='{range}')"
       ),
       http_verb = "PATCH",
       body = list(values = list(list(new))),
       encode = "json"
-    )
+    ))
   }, .progress = "Patching values")
 
   cli::cli_alert_success("Patched {nrow(x)} cell{?s} in {.val {path}}")

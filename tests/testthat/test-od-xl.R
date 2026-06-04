@@ -6,6 +6,78 @@ make_test_wb <- function(df, table_name = "testtable", sheet = "Sheet1", dims = 
   wb
 }
 
+# ── graph_http_status ────────────────────────────────────────────────────────
+
+test_that("graph_http_status parses the HTTP code from an AzureGraph message", {
+  e <- simpleError("Service Unavailable (HTTP 503). Failed to complete operation.")
+  expect_equal(graph_http_status(e), 503L)
+})
+
+test_that("graph_http_status returns NA when no code is present", {
+  expect_true(is.na(graph_http_status(simpleError("Timeout was reached [graph.microsoft.com]"))))
+})
+
+# ── graph_retry ──────────────────────────────────────────────────────────────
+
+test_that("graph_retry returns the value and does not retry on success", {
+  n <- 0
+  res <- graph_retry(\() { n <<- n + 1; "ok" }, quiet = TRUE)
+  expect_equal(res, "ok")
+  expect_equal(n, 1)
+})
+
+test_that("graph_retry retries a transient 503 then succeeds", {
+  n <- 0
+  res <- graph_retry(\() {
+    n <<- n + 1
+    if (n < 3) stop(simpleError("Service Unavailable (HTTP 503)."))
+    "done"
+  }, base_wait = 0, max_wait = 0, quiet = TRUE)
+  expect_equal(res, "done")
+  expect_equal(n, 3)
+})
+
+test_that("graph_retry does not retry a non-transient 400", {
+  n <- 0
+  expect_error(
+    graph_retry(\() { n <<- n + 1; stop(simpleError("Bad Request (HTTP 400).")) },
+                base_wait = 0, max_wait = 0, quiet = TRUE),
+    "HTTP 400"
+  )
+  expect_equal(n, 1)
+})
+
+test_that("graph_retry gives up after max_tries and re-throws", {
+  n <- 0
+  expect_error(
+    graph_retry(\() { n <<- n + 1; stop(simpleError("Service Unavailable (HTTP 503).")) },
+                max_tries = 3, base_wait = 0, max_wait = 0, quiet = TRUE),
+    "HTTP 503"
+  )
+  expect_equal(n, 3)
+})
+
+test_that("graph_retry treats 504 as non-retryable for non-idempotent calls", {
+  n <- 0
+  expect_error(
+    graph_retry(\() { n <<- n + 1; stop(simpleError("Gateway Timeout (HTTP 504).")) },
+                idempotent = FALSE, base_wait = 0, max_wait = 0, quiet = TRUE),
+    "HTTP 504"
+  )
+  expect_equal(n, 1)
+})
+
+test_that("graph_retry retries a non-idempotent 503 (request never landed)", {
+  n <- 0
+  res <- graph_retry(\() {
+    n <<- n + 1
+    if (n < 2) stop(simpleError("Service Unavailable (HTTP 503)."))
+    "appended"
+  }, idempotent = FALSE, base_wait = 0, max_wait = 0, quiet = TRUE)
+  expect_equal(res, "appended")
+  expect_equal(n, 2)
+})
+
 # ── graph_df_to_values ───────────────────────────────────────────────────────
 
 test_that("graph_df_to_values converts a data frame to nested lists", {
