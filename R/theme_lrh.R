@@ -122,11 +122,11 @@ register_lrh_fonts <- function(fonts = c(
   "Open Sans SemiCondensed ExtraBold",
   "Open Sans SemiCondensed SemiBold"
 )) {
-  font_files <- extrafont::fonttable() |>
-    dplyr::filter(FullName %in% fonts) |>
-    dplyr::select(FullName, fontfile)
+  font_files <- systemfonts::system_fonts() |>
+    dplyr::filter(name %in% fonts) |>
+    dplyr::select(name, path)
 
-  purrr::pwalk(font_files, function(FullName, fontfile) {
-    systemfonts::register_font(name = FullName, plain = fontfile)
+  purrr::pwalk(font_files, function(name, path) {
+    systemfonts::register_font(name = name, plain = path)
   })
 }
