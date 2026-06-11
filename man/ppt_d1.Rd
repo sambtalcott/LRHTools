@@ -5,9 +5,9 @@
 \alias{ppt_d2}
 \title{Add data slides to an \link[officer:officer]{officer} ppt object}
 \usage{
-ppt_d1(p, content, as_rvg = TRUE, notes = NULL)
+ppt_d1(p, content, as_rvg = FALSE, notes = NULL)
 
-ppt_d2(p, left, right, as_rvg = TRUE, notes = NULL)
+ppt_d2(p, left, right, as_rvg = FALSE, notes = NULL)
 }
 \arguments{
 \item{p}{rpptx object (from \code{\link[=ppt_lrh]{ppt_lrh()}})}

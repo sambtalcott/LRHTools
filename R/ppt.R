@@ -59,7 +59,7 @@ ppt_lrh <- function(title = NULL, subtitle = NULL,
 #' @returns rpptx object
 #' @md
 #' @export
-ppt_d1 <- function(p, content, as_rvg = TRUE, notes = NULL) {
+ppt_d1 <- function(p, content, as_rvg = FALSE, notes = NULL) {
   if (interactive()) try(print(content), silent = TRUE)
   if (as_rvg) content <- ppt_as_dml(content)
   p <- p |>
@@ -74,7 +74,7 @@ ppt_d1 <- function(p, content, as_rvg = TRUE, notes = NULL) {
 #' @md
 #' @rdname ppt_d1
 #' @export
-ppt_d2 <- function(p, left, right, as_rvg = TRUE, notes = NULL) {
+ppt_d2 <- function(p, left, right, as_rvg = FALSE, notes = NULL) {
   if (interactive()) {
     if (inherits(left, "gg") && inherits(right, "gg")) {
       try(print(patchwork::wrap_plots(left, right, nrow = 1)), silent = TRUE)
