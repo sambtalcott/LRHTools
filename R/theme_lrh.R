@@ -122,11 +122,16 @@ register_lrh_fonts <- function(fonts = c(
   "Open Sans SemiCondensed ExtraBold",
   "Open Sans SemiCondensed SemiBold"
 )) {
+  # system_fonts()$name is the PostScript name (no spaces), so build the
+  # display name from family + style to match the names theme_lrh() requests
   font_files <- systemfonts::system_fonts() |>
-    dplyr::filter(name %in% fonts) |>
-    dplyr::select(name, path)
+    dplyr::mutate(full_name = trimws(paste(family, style))) |>
+    dplyr::filter(full_name %in% fonts) |>
+    # the same font can be installed at both user and machine scope
+    dplyr::distinct(full_name, .keep_all = TRUE) |>
+    dplyr::select(full_name, path)
 
-  purrr::pwalk(font_files, function(name, path) {
-    systemfonts::register_font(name = name, plain = path)
+  purrr::pwalk(font_files, function(full_name, path) {
+    systemfonts::register_font(name = full_name, plain = path)
   })
 }
