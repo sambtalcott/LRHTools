@@ -1369,7 +1369,7 @@ od_write_xlsx <- function(x, path, od, ...) {
     tf <- tempfile(fileext = ".xlsx")
     # For openxlsx2 objects
     if (inherits(x, "wbWorkbook")) {
-      x$save(file = tf, ...)
+      wb_save_retry(x, tf, ...)
     } else {
       writexl::write_xlsx(x = x, path = tf, ...)
     }

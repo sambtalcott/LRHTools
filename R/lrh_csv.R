@@ -106,19 +106,8 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
 
   if (is.null(file)) file <- tempfile(fileext = ".xlsx")
 
-  # Make 3 save attempts
-  attempts <- 1:2
-  for (attempt in attempts) {
-
-    # Attempt to save, swallow error, backoff a bit.
-    tryCatch({wb$save(file = file); break}, error = \(e) {})
-
-    cli::cli_alert_warning("Write attempt failed. Trying again in {0.75*attempt} seconds")
-    Sys.sleep(0.75 * attempt)
-
-    # One last attempt to surface real errors
-    if (attempt == max(attempts)) wb$save(file = file)
-  }
+  # Save with retries (transient AV/endpoint-security locks on fresh zips)
+  wb_save_retry(wb, file)
 
   if (open) shell.exec(file)
 
