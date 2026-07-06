@@ -28,18 +28,42 @@ wb_save_retry <- function(wb, file, ..., waits = c(1, 3, 9)) {
     )
   }
 
+  # openxlsx2's "Failed to save workbook" is a bare stop() after file.copy()
+  # returns FALSE, and file.copy() fails *silently* (file.create with
+  # showWarnings = FALSE), so no OS reason ever reaches the handlers above.
+  # Probe the destination side ourselves: if the destination opens fine for
+  # write, the copy must have failed reading the freshly-zipped source file
+  # (e.g. an endpoint-security scan lock).
+  diagnose <- function() {
+    dir <- dirname(file)
+    existed <- file.exists(file) # before the probe, which creates it
+    probe <- tryCatch(
+      { close(base::file(file, open = "wb")); "writable" },
+      error = \(e) conditionMessage(e),
+      warning = \(w) conditionMessage(w)
+    )
+    cli::cli_alert_warning(paste0(
+      "Save diagnostics: dir exists: {dir.exists(dir)} | ",
+      "dir writable: {file.access(dir, 2) == 0} | ",
+      "dest existed: {existed} | ",
+      "dest open-for-write: {probe}"
+    ))
+  }
+
   for (wait in waits) {
     ok <- tryCatch({save_once(); TRUE}, error = \(e) {
       cli::cli_alert_warning(
         "Workbook save failed ({conditionMessage(e)}). Retrying in {wait}s"
       )
+      diagnose()
       FALSE
     })
     if (ok) return(invisible(file))
     Sys.sleep(wait)
   }
 
-  # One last attempt to surface real errors
-  save_once()
+  # One last attempt to surface real errors (diagnostics logged before the
+  # error propagates)
+  withCallingHandlers(save_once(), error = \(e) diagnose())
   invisible(file)
 }
