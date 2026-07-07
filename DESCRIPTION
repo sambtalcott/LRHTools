@@ -1,7 +1,7 @@
 Package: LRHTools
 Type: Package
 Title: What the Package Does (Title Case)
-Version: 0.1.7
+Version: 0.2.0
 Authors@R: c(
     person(
       "Sam", "Talcott",
@@ -16,6 +16,7 @@ Encoding: UTF-8
 LazyData: true
 Imports:
     AzureAuth,
+    blastula,
     cli,
     DBI,
     dplyr,
@@ -50,7 +51,9 @@ Imports:
     rvg,
     stringdist,
     tidyr
-Suggests: 
+Suggests:
+    pagedown,
+    quarto,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 URL: https://github.com/sambtalcott/LRHTools
