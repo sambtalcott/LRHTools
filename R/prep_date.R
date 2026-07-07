@@ -97,3 +97,40 @@ lab_yq <- function(x) {
   dplyr::if_else(x %in% first_dates, paste0(x_q, "\n", lubridate::year(x)), x_q)
 
 }
+
+#' Most recent complete month
+#'
+#' Returns the most recent complete time period, given a certain amount of
+#' flex. For example, a `flex` value of `days(5)` would allow June to count
+#' as the most recent month for June 26th, but not June 25th.
+#'
+#' @param flex How flexible to be on the time period? Use `days()`, `weeks()`, etc.
+#' @param unit What time unit to use. Passed to [lubridate::floor_date]
+#'
+#' @returns a date (no time zone)
+#' @export
+#'
+#' @md
+last_x <- function(unit, flex = lubridate::days(0)) {
+  if (!lubridate::is.period(flex)) {
+    cli::cli_abort(c(
+      "x" = "Value of {.var flex} needs to be a period (e.g. `lubridate::days(5)`)",
+      "i" = "Given value was {.val {flex}}"
+    ))
+  }
+  lubridate::`%m-%`(Sys.time() + flex, months(1)) |>
+    lubridate::floor_date(unit) |>
+    lubridate::as_date()
+}
+
+#' @rdname last_x
+#' @export
+last_mo <- function(flex = lubridate::days(0)) {
+  last_x("month", flex)
+}
+
+#' @rdname last_x
+#' @export
+last_q <- function(flex = lubridate::days(0)) {
+  last_x("quarter", flex)
+}
