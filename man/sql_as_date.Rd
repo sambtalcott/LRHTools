@@ -2,9 +2,12 @@
 % Please edit documentation in R/sql.R
 \name{sql_as_date}
 \alias{sql_as_date}
+\alias{sql_mo}
 \title{As Date with TZ function for dbplyr pipelines}
 \usage{
 sql_as_date(x, tz = "America/New_York")
+
+sql_mo(x, tz = "America/New_York")
 }
 \arguments{
 \item{x}{values to cast to date}
@@ -15,5 +18,12 @@ sql_as_date(x, tz = "America/New_York")
 a \code{sql()} CAST statement
 }
 \description{
-Use with the \verb{!!} operator to return the sql statement before translation
+Use with the \verb{!!} operator to return the sql statement before translation.
+\code{sql_mo()} floors the date to the nearest month.
+}
+\details{
+Both functions accept \code{TIMESTAMPTZ}, naive \code{TIMESTAMP} (assumed UTC), and
+\code{DATE} columns and return the calendar date/month in \code{tz}. The input type is
+detected at runtime so the result is correct regardless of the session
+timezone.
 }

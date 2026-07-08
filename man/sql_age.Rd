@@ -5,7 +5,7 @@
 \alias{age}
 \title{Age at a given time}
 \usage{
-sql_age(dt, dob)
+sql_age(dt, dob, tz = "America/New_York")
 
 age(dt, dob)
 }
@@ -13,6 +13,8 @@ age(dt, dob)
 \item{dt}{date at which to find the age}
 
 \item{dob}{date of birth}
+
+\item{tz}{timezone used to resolve \code{dt}/\code{dob} to calendar dates.}
 }
 \value{
 \code{sql_age()} returns a sql() statement, \code{age()} returns an integer age
@@ -20,4 +22,9 @@ age(dt, dob)
 \description{
 \code{sql_age()} is designed to be used in lazy tibbles. Use with the \verb{!!}
 operator for local evaluation into a \code{sql()} string first.
+}
+\details{
+\code{dt} and \code{dob} may be \code{TIMESTAMPTZ}, naive \code{TIMESTAMP} (assumed UTC), or
+\code{DATE}; both are normalized to a calendar date in \code{tz} before the age is
+computed.
 }
