@@ -2,27 +2,9 @@
 % Please edit documentation in R/duckdb.R
 \name{upsert_duckdb}
 \alias{upsert_duckdb}
-\alias{upsert_duckdb_od}
-\alias{upsert_duckdb_local}
 \title{Upsert in DuckDB}
 \usage{
 upsert_duckdb(table, x, id_col, dt_col)
-
-upsert_duckdb_od(
-  table,
-  x,
-  id_col,
-  dt_col,
-  od_folder = "Documents/.database/Tableau Data"
-)
-
-upsert_duckdb_local(
-  table,
-  x,
-  id_col,
-  dt_col,
-  loc_folder = lrh_tableau_folder()
-)
 }
 \arguments{
 \item{table}{Table name}
@@ -32,10 +14,6 @@ upsert_duckdb_local(
 \item{id_col}{the id column of the table}
 
 \item{dt_col}{the date column of the table}
-
-\item{od_folder}{The folder to save the .csv file in for \code{upsert_duckdb_od()}}
-
-\item{loc_folder}{The folder to save the .cvs file in for \code{upsert_duckdb_local()}}
 }
 \value{
 number of rows affected

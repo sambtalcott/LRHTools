@@ -284,8 +284,6 @@ write_tz_duckdb <- function(table, x, overwrite = FALSE) {
 #' @param x data frame to update
 #' @param id_col the id column of the table
 #' @param dt_col the date column of the table
-#' @param od_folder The folder to save the .csv file in for `upsert_duckdb_od()`
-#' @param loc_folder The folder to save the .cvs file in for `upsert_duckdb_local()`
 #'
 #' @returns number of rows affected
 #' @export
@@ -358,36 +356,6 @@ upsert_duckdb <- function(table, x, id_col, dt_col) {
   DBI::dbExecute(con, iq)
 }
 
-#' Upsert into DuckDB AND write .csv to OneDrive for Tableau
-#' @export
-#' @rdname upsert_duckdb
-upsert_duckdb_od <- function(table, x, id_col, dt_col,
-                             od_folder = "Documents/.database/Tableau Data") {
-  cli::cli_status("{.info Updating in DuckDB}")
-  upsert_duckdb(table, x, id_col, dt_col)
-  cli::cli_status("{.info Pulling final data from DuckDB}")
-  x <- pull_duckdb(table)
-  cli::cli_status("{.info Writing .csv to OneDrive}")
-  od_write(x, file.path(od_folder, paste0(table, ".csv")))
-  cli::cli_status_clear()
-  cli::cli_alert_success("Successfully upserted {.val {table}}!")
-}
-
-#' Upsert into DuckDB AND write .csv locally for Tableau
-#' @export
-#' @rdname upsert_duckdb
-upsert_duckdb_local <- function(table, x, id_col, dt_col,
-                                loc_folder = lrh_tableau_folder()) {
-  cli::cli_status("{.info Updating in DuckDB}")
-  upsert_duckdb(table, x, id_col, dt_col)
-  cli::cli_status(cli::col_yellow("{.info Pulling final data from DuckDB}"))
-  x <- pull_duckdb(table)
-  cli::cli_status(cli::col_yellow("{.info Writing .csv locally}"))
-  readr::write_csv(x, file.path(loc_folder, paste0(table, ".csv")))
-  cli::cli_status_clear()
-  cli::cli_alert_success(cli::col_yellow("Successfully upserted {.val {table}}!"))
-}
-
 #' LRH Database File Location
 #'
 #' This function will pull the database file location for your computer.
@@ -441,21 +409,24 @@ choose_lrh_db <- function() {
   .ddb_env$lrh_db <- db_file
 }
 
-#' LRH Tableau Folder
+#' Path helper for the Sharepoint Tableau Data Folder
 #'
-#' Helper function to return the local location of the LRH Tableau Folder. Uses
-#' the location of the lrh database (`lrh_db()`) to get the location of the
-#' folder
+#' Helper function to return the local location of the LRH Tableau Data Folder.
+#' Can be run with arguments like [file.path()]
+#'
+#' @param ... additional arguments passed to [file.path()]
 #'
 #' @returns a file path
 #' @export
 #' @md
-lrh_tableau_folder <- function() {
-  # Work backwards from the db file
-  parent <- dirname(lrh_db())
-  lrh_tab <- file.path(parent, "Tableau Data")
-  if (!dir.exists(lrh_tab)) cli::cli_abort("Attempted to use folder {.val {lrh_tab}}, which doesn't exist")
-  lrh_tab
+tableau_data_path <- function(...) {
+
+  # Hard-coded parent folder
+  f <- "C:\\Users\\stalcott\\Littleton Regional Healthcare\\Sam Tableau - General\\Quality\\Tableau Data"
+
+  if (!dir.exists(f)) cli::cli_abort("Could not find Tableau Data folder at {.path {f}}")
+
+  normalizePath(file.path(f, ...))
 }
 
 
