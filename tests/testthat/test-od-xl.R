@@ -282,6 +282,64 @@ test_that("compare fills missing columns with NA for appends", {
   expect_true(is.na(result$append$extra))
 })
 
+test_that("compare detects missing rows as removes with 0-based indices", {
+  wb_df <- data.frame(id = 1:3, val = c("a", "b", "c"))
+  wb <- make_test_wb(wb_df)
+
+  x <- data.frame(id = c(1L, 3L), val = c("a", "c"))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(x, "test.xlsx", "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(result$remove), 1)
+  expect_equal(result$remove$id, 2)
+  expect_equal(result$remove$index, 1L)
+})
+
+test_that("compare ignores the blank placeholder row left by removing all rows", {
+  # After od_xl_remove() deletes every data row, Excel keeps a single blank
+  # row inside the table ref. It reads back as all-NA but is not a real
+  # member of the Graph table-rows collection, so flagging it for removal
+  # makes the next od_xl_remove() error. It must not appear in $remove; the
+  # next append writes over it.
+  wb_df <- data.frame(id = NA_integer_, val = NA_character_)
+  wb <- make_test_wb(wb_df)
+
+  x <- data.frame(id = 1:2, val = c("a", "b"))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(x, "test.xlsx", "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(result$remove), 0)
+  expect_equal(nrow(result$append), 2)
+})
+
+test_that("compare skips only all-NA rows; real removes keep their indices", {
+  wb_df <- data.frame(id = c(1L, NA, 3L), val = c("a", NA, "c"))
+  wb <- make_test_wb(wb_df)
+
+  x <- data.frame(id = 1L, val = "a")
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(x, "test.xlsx", "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(result$remove), 1)
+  expect_equal(result$remove$id, 3)
+  expect_equal(result$remove$index, 2L)
+})
+
 test_that("compare errors on missing columns in x", {
   wb_df <- data.frame(id = 1, val = "a")
   wb <- make_test_wb(wb_df)

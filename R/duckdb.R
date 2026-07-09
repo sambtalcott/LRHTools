@@ -539,3 +539,20 @@ lastupdate_min_duckdb <- function(table, min_dt, dt_col = NULL) {
   ))
 }
 
+#' Materialize a view
+#'
+#' @param view name of the view to materialize
+#' @param table name of the table to create
+#' @param con Connection to use. Defaults to [lrh_con()]
+#' @param quiet If TRUE doesn't display the success message
+#'
+#' @returns tbl(con, table), invisibly
+#' @export
+#' @md
+materialize <- function(view, table, con = lrh_con(), quiet = FALSE) {
+    DBI::dbExecute(con, stringr::str_glue("CREATE OR REPLACE TABLE {table} AS SELECT * FROM {view}"))
+    DBI::dbExecute(con, "CHECKPOINT")
+    gc()
+    if (!quiet) cli::cli_alert_success("Materialized {.var {table}}")
+    invisible(dplyr::tbl(con, table))
+  }

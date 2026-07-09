@@ -1,0 +1,4 @@
+Name: Preview SQL Selection
+Description: Preview the highlighted SQL (or the statement under the cursor) using the file's !preview connection or lrh_con().
+Binding: preview_sql_selection
+Interactive: false

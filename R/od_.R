@@ -944,6 +944,9 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #' @returns a list of (append, patch, remove) for use with `od_xl_append()`,
 #'   `od_xl_patch()`, and `od_xl_remove()`. `remove` has all table columns plus
 #'   an `index` column (0-based row index within the table's data rows).
+#'   Fully-blank rows are excluded from `remove`: the placeholder row Excel
+#'   keeps after every table row is deleted is not a real Graph table row
+#'   (deleting it errors) and the next append writes over it.
 #' @export
 #' @md
 od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_types = NULL,
@@ -1097,6 +1100,14 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
     dplyr::mutate(index = dplyr::row_number() - 1L) |>
     dplyr::anti_join(x, by = id_cols) |>
     tibble::as_tibble()
+
+  # An Excel Table whose data rows have all been deleted keeps one blank
+  # placeholder row. It reads back as all-NA but isn't a real member of the
+  # Graph table-rows collection, so trying to delete it errors — and the next
+  # append writes over it anyway. Leave all-NA rows out of `remove`. (The
+  # wb_df uniqueness check above means at most one such row can exist here.)
+  remove <- remove |>
+    dplyr::filter(!dplyr::if_all(-dplyr::all_of("index"), is.na))
 
   list(append = append, patch = patch, remove = remove)
 }

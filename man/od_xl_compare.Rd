@@ -49,6 +49,9 @@ yourself before calling. Set to \code{NULL} to skip coercion entirely.}
 a list of (append, patch, remove) for use with \code{od_xl_append()},
 \code{od_xl_patch()}, and \code{od_xl_remove()}. \code{remove} has all table columns plus
 an \code{index} column (0-based row index within the table's data rows).
+Fully-blank rows are excluded from \code{remove}: the placeholder row Excel
+keeps after every table row is deleted is not a real Graph table row
+(deleting it errors) and the next append writes over it.
 }
 \description{
 Returns a list of (append, patch, remove) for syncing an Excel Table to \code{x}.
