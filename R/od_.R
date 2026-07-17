@@ -208,6 +208,9 @@ od_get_shortcut <- function(name, od = NULL) {
     od <- Microsoft365R::get_business_onedrive()
   }
 
+  # Refresh token first if it has expired.
+  if (!od$token$validate()) od$token$refresh()
+
   response <- httr::GET("https://graph.microsoft.com/v1.0/me/drive/root/children",
                   httr::add_headers(Authorization = paste("Bearer", od$token$credentials$access_token),
                               Prefer = "Include-Feature=AddToOneDrive"))
