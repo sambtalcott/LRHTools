@@ -125,11 +125,11 @@ register_lrh_fonts <- function(fonts = c(
   # system_fonts()$name is the PostScript name (no spaces), so build the
   # display name from family + style to match the names theme_lrh() requests
   font_files <- systemfonts::system_fonts() |>
-    dplyr::mutate(full_name = trimws(paste(family, style))) |>
-    dplyr::filter(full_name %in% fonts) |>
+    dplyr::mutate(full_name = trimws(paste(.data$family, .data$style))) |>
+    dplyr::filter(.data$full_name %in% fonts) |>
     # the same font can be installed at both user and machine scope
-    dplyr::distinct(full_name, .keep_all = TRUE) |>
-    dplyr::select(full_name, path)
+    dplyr::distinct(.data$full_name, .keep_all = TRUE) |>
+    dplyr::select(.data$full_name, .data$path)
 
   purrr::pwalk(font_files, function(full_name, path) {
     systemfonts::register_font(name = full_name, plain = path)

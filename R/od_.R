@@ -1027,15 +1027,22 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
     ))
   }
 
-  # Error checking: unique by id columns
-  x_dupes <- x |> dplyr::add_count(dplyr::across(dplyr::all_of(id_cols))) |> dplyr::filter(n>1)
+  # Error checking: unique by id columns. Uses .n in case an n column already exists
+  x_dupes <- x |>
+    dplyr::add_count(dplyr::across(dplyr::all_of(id_cols)), name = ".n") |>
+    dplyr::filter(.data$.n > 1)
+
   if (x_dupes |> nrow() > 0) {
     utils::View(x_dupes)
     cli::cli_abort(c(
       "x" = "Values in {.var x} are not uniquely identified by {.var {id_cols}}"
     ))
   }
-  wb_dupes <- wb_df |> dplyr::add_count(dplyr::across(dplyr::all_of(id_cols))) |> dplyr::filter(n>1)
+
+  wb_dupes <- wb_df |>
+    dplyr::add_count(dplyr::across(dplyr::all_of(id_cols)), name = ".n") |>
+    dplyr::filter(.data$.n > 1)
+
   if (wb_dupes |> nrow() > 0) {
     utils::View(wb_dupes)
     cli::cli_abort(c(
