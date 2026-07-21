@@ -4,7 +4,7 @@
 \alias{od_xl_patch}
 \title{Patch cells through the coauthoring API}
 \usage{
-od_xl_patch(x, path, od = NULL, unprotect = FALSE)
+od_xl_patch(x, path, od = NULL, unprotect = FALSE, use_blocks = TRUE)
 }
 \arguments{
 \item{x}{Data frame with columns \code{sheet}, \code{range}, and \code{new}}
@@ -16,6 +16,13 @@ od_xl_patch(x, path, od = NULL, unprotect = FALSE)
 \item{unprotect}{If \code{TRUE}, temporarily unprotects affected worksheets before
 patching and re-protects afterwards. Only works with passwordless
 protection.}
+
+\item{use_blocks}{If \code{TRUE} (default), batch contiguous cells into
+rectangular range writes. Requires every \code{range} to be a single-cell
+address (\code{"C4"}) and no cell to appear twice; both error out. Set to
+\code{FALSE} to write one cell per request — needed for hand-built input using
+multi-cell ranges, and useful for isolating which cell a failing patch is
+choking on.}
 }
 \value{
 the ms_drive_item (invisibly)
@@ -23,4 +30,12 @@ the ms_drive_item (invisibly)
 \description{
 This is designed to work with \code{od_xl_compare()}, but can also be done
 manually by creating a data frame with columns \code{sheet}, \code{range}, and \code{new}.
+}
+\details{
+By default, cells are grouped into the largest rectangular blocks that are
+\emph{fully} covered by \code{x} and each block is written in one request, which cuts
+the round trips dramatically for the usual case of a column refreshed
+across many rows. Gaps are never bridged: a rectangle PATCH overwrites
+every cell it spans, so only complete rectangles are batched and scattered
+cells still go one at a time. Blocks are capped at 500 rows.
 }

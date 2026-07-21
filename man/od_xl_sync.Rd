@@ -13,7 +13,8 @@ od_xl_sync(
   remove = FALSE,
   unprotect = FALSE,
   wb_types = NULL,
-  coerce_tz = "America/New_York"
+  coerce_tz = "America/New_York",
+  use_blocks = TRUE
 )
 }
 \arguments{
@@ -41,6 +42,10 @@ openxlsx2 type codes overriding the auto-inferred types.}
 \item{coerce_tz}{Forwarded to \code{\link[=od_xl_compare]{od_xl_compare()}}. Timezone to coerce
 workbook POSIXct columns to. Default \code{"America/New_York"}; \code{NULL} to
 skip.}
+
+\item{use_blocks}{Forwarded to \code{\link[=od_xl_patch]{od_xl_patch()}}. \code{TRUE} (default) batches
+contiguous changed cells into rectangular range writes; \code{FALSE} patches
+one cell per request.}
 }
 \value{
 The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove)}).

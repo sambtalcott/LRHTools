@@ -442,6 +442,134 @@ test_that("patch coerces Date values", {
   expect_equal(calls[[1]]$body$values, list(list("2025-06-15")))
 })
 
+test_that("blocks merge a contiguous column into one range", {
+  x <- data.frame(sheet = "S1", range = paste0("B", 2:5), new = letters[1:4])
+  b <- xl_patch_blocks(x)
+
+  expect_equal(nrow(b), 1)
+  expect_equal(b$address, "B2:B5")
+  expect_equal(b$values[[1]], list(list("a"), list("b"), list("c"), list("d")))
+})
+
+test_that("blocks merge a contiguous rectangle into one range", {
+  x <- data.frame(
+    sheet = "S1",
+    range = c("B2", "C2", "B3", "C3"),
+    new = c("a", "b", "c", "d")
+  )
+  b <- xl_patch_blocks(x)
+
+  expect_equal(nrow(b), 1)
+  expect_equal(b$address, "B2:C3")
+  expect_equal(b$values[[1]], list(list("a", "b"), list("c", "d")))
+})
+
+test_that("blocks never bridge a gap", {
+  # B4 missing: a bounding box would blank it out
+  x <- data.frame(sheet = "S1", range = c("B2", "B3", "B5"), new = c("a", "b", "c"))
+  b <- xl_patch_blocks(x)
+
+  expect_equal(b$address, c("B2:B3", "B5"))
+  expect_equal(b$values, list(list(list("a"), list("b")), list(list("c"))))
+})
+
+test_that("blocks don't merge strips with different column spans", {
+  x <- data.frame(
+    sheet = "S1",
+    range = c("B2", "C2", "B3"),
+    new = c("a", "b", "c")
+  )
+  b <- xl_patch_blocks(x)
+
+  expect_equal(sort(b$address), c("B2:C2", "B3"))
+})
+
+test_that("blocks are keyed by address, not input order", {
+  x <- data.frame(
+    sheet = "S1",
+    range = c("C3", "B2", "C2", "B3"),
+    new = c("d", "a", "b", "c")
+  )
+  b <- xl_patch_blocks(x)
+
+  expect_equal(b$address, "B2:C3")
+  expect_equal(b$values[[1]], list(list("a", "b"), list("c", "d")))
+})
+
+test_that("blocks are split at the row cap", {
+  x <- data.frame(sheet = "S1", range = paste0("A", 1:5), new = as.character(1:5))
+  b <- xl_patch_blocks(x, max_rows = 2L)
+
+  expect_equal(b$address, c("A1:A2", "A3:A4", "A5"))
+})
+
+test_that("blocks keep sheets separate", {
+  x <- data.frame(sheet = c("S1", "S2"), range = c("A1", "A2"), new = c("a", "b"))
+  b <- xl_patch_blocks(x)
+
+  expect_equal(nrow(b), 2)
+  expect_equal(b$sheet, c("S1", "S2"))
+})
+
+test_that("blocks error on multi-cell or duplicated addresses", {
+  expect_error(
+    xl_patch_blocks(data.frame(sheet = "S1", range = "A1:B2", new = "a")),
+    "single-cell address"
+  )
+  expect_error(
+    xl_patch_blocks(data.frame(sheet = "S1", range = c("A1", "A1"), new = c("a", "b"))),
+    "more than one value for the same cell"
+  )
+})
+
+test_that("patch batches contiguous cells into one request", {
+  calls <- list()
+  mock_item <- list(
+    do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) }
+  )
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(od_exists = function(...) TRUE)
+
+  x <- data.frame(sheet = "Sheet1", range = paste0("B", 2:4), new = c("a", "b", "c"))
+  od_xl_patch(x, "test.xlsx", od = mock_od)
+
+  expect_length(calls, 1)
+  expect_match(calls[[1]][[1]], "address='B2:B4'", fixed = TRUE)
+  expect_equal(calls[[1]]$body$values, list(list("a"), list("b"), list("c")))
+})
+
+test_that("patch with use_blocks = FALSE writes one cell per request", {
+  calls <- list()
+  mock_item <- list(
+    do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) }
+  )
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(od_exists = function(...) TRUE)
+
+  x <- data.frame(sheet = "Sheet1", range = paste0("B", 2:4), new = c("a", "b", "c"))
+  od_xl_patch(x, "test.xlsx", od = mock_od, use_blocks = FALSE)
+
+  expect_length(calls, 3)
+  expect_equal(calls[[1]]$body$values, list(list("a")))
+})
+
+test_that("patch clears NA values as empty strings within a block", {
+  calls <- list()
+  mock_item <- list(
+    do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) }
+  )
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(od_exists = function(...) TRUE)
+
+  x <- data.frame(sheet = "Sheet1", range = c("B2", "B3"), new = c("a", NA))
+  od_xl_patch(x, "test.xlsx", od = mock_od)
+
+  expect_equal(calls[[1]]$body$values, list(list("a"), list("")))
+})
+
 test_that("patch errors on non-xlsx path", {
   local_mocked_bindings(od_exists = function(...) TRUE)
 

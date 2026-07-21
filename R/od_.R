@@ -1191,10 +1191,111 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
   invisible(item)
 }
 
+# Group single-cell patch addresses into maximal rectangular blocks.
+#
+# A range PATCH writes *every* cell in its rectangle, so a block may only be
+# emitted when all of its cells are present in `x` — a bounding box with gaps
+# would blank out cells the caller never asked to touch, and whose values
+# `od_xl_patch()` has no way to know. Two passes give an exact decomposition:
+#   1. contiguous column runs within a sheet+row -> horizontal strips
+#   2. vertically adjacent strips sharing a column span -> blocks
+# That collapses the shapes `od_xl_compare()` actually produces (one refreshed
+# column across many rows; a few columns changed on a run of rows) into a
+# single request each, while scattered edits stay one request apiece.
+#
+# Blocks are capped at `max_rows` rows: oversized bodies are what push the
+# range PATCH into 504s, and the cap bounds the cost of one failed request.
+#
+# Returns a tibble of sheet/address/values, one row per request.
+xl_patch_blocks <- function(x, max_rows = 500L) {
+
+  parts <- stringr::str_match(x$range, "^\\$?([A-Za-z]+)\\$?([0-9]+)$")
+  bad <- is.na(parts[, 1])
+  if (any(bad)) cli::cli_abort(c(
+    "x" = "{.var range} must be a single-cell address like {.val C4}",
+    "i" = "Got {.val {unique(x$range[bad])}}",
+    "i" = "Use {.code use_blocks = FALSE} to patch these one cell at a time"
+  ))
+
+  cells <- tibble::tibble(
+    sheet = x$sheet,
+    range = x$range,
+    row = as.integer(parts[, 3]),
+    col = openxlsx2::col2int(toupper(parts[, 2])),
+    new = x$new
+  )
+
+  # Values are looked up by address, never by row order, so a block can't be
+  # filled from mis-sorted input. That makes duplicates ambiguous, and they
+  # would also break the run detection below.
+  dupes <- cells |>
+    dplyr::filter(dplyr::n() > 1, .by = c("sheet", "row", "col"))
+  if (nrow(dupes) > 0) cli::cli_abort(c(
+    "x" = "{.var x} has more than one value for the same cell",
+    "i" = "Duplicated: {.val {unique(dupes$range)}}"
+  ))
+
+  # Pass 1: contiguous column runs within a sheet+row -> horizontal strips.
+  # `diff(col) != 1` marks each break in the run; the cumsum numbers them.
+  strips <- cells |>
+    dplyr::arrange(.data$sheet, .data$row, .data$col) |>
+    dplyr::mutate(strip = cumsum(c(1L, diff(.data$col) != 1L)),
+                  .by = c("sheet", "row")) |>
+    dplyr::summarise(c1 = min(.data$col), c2 = max(.data$col),
+                     .by = c("sheet", "row", "strip"))
+
+  # Pass 2: vertically adjacent strips sharing a column span -> blocks
+  blocks <- strips |>
+    dplyr::arrange(.data$sheet, .data$c1, .data$c2, .data$row) |>
+    dplyr::mutate(block = cumsum(c(1L, diff(.data$row) != 1L)),
+                  .by = c("sheet", "c1", "c2")) |>
+    dplyr::summarise(r1 = min(.data$row), r2 = max(.data$row),
+                     .by = c("sheet", "c1", "c2", "block"))
+
+  # Split blocks taller than max_rows into stacked chunks
+  blocks <- blocks |>
+    dplyr::mutate(top = purrr::map2(.data$r1, .data$r2,
+                                    \(r1, r2) seq(r1, r2, by = max_rows))) |>
+    tidyr::unnest("top") |>
+    dplyr::mutate(r2 = pmin(.data$top + max_rows - 1L, .data$r2),
+                  r1 = .data$top)
+
+  # Look up each block's values by address and shape them into a row-major
+  # nested list, which is what the Graph range PATCH expects for `values`.
+  vals <- stats::setNames(
+    cells$new,
+    paste(cells$sheet, cells$row, cells$col, sep = "\r")
+  )
+
+  blocks |>
+    dplyr::mutate(
+      address = dplyr::if_else(
+        .data$r1 == .data$r2 & .data$c1 == .data$c2,
+        paste0(openxlsx2::int2col(.data$c1), .data$r1),
+        paste0(openxlsx2::int2col(.data$c1), .data$r1, ":",
+               openxlsx2::int2col(.data$c2), .data$r2)
+      ),
+      values = purrr::pmap(
+        dplyr::pick("sheet", "r1", "r2", "c1", "c2"),
+        \(sheet, r1, r2, c1, c2) lapply(r1:r2, \(row) unname(as.list(
+          vals[paste(sheet, row, c1:c2, sep = "\r")]
+        )))
+      )
+    ) |>
+    dplyr::select("sheet", "address", "values")
+}
+
 #' Patch cells through the coauthoring API
 #'
 #' This is designed to work with `od_xl_compare()`, but can also be done
 #' manually by creating a data frame with columns `sheet`, `range`, and `new`.
+#'
+#' By default, cells are grouped into the largest rectangular blocks that are
+#' *fully* covered by `x` and each block is written in one request, which cuts
+#' the round trips dramatically for the usual case of a column refreshed
+#' across many rows. Gaps are never bridged: a rectangle PATCH overwrites
+#' every cell it spans, so only complete rectangles are batched and scattered
+#' cells still go one at a time. Blocks are capped at 500 rows.
 #'
 #' @param x Data frame with columns `sheet`, `range`, and `new`
 #' @param path The location in the Sharepoint drive
@@ -1202,11 +1303,18 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
 #' @param unprotect If `TRUE`, temporarily unprotects affected worksheets before
 #'   patching and re-protects afterwards. Only works with passwordless
 #'   protection.
+#' @param use_blocks If `TRUE` (default), batch contiguous cells into
+#'   rectangular range writes. Requires every `range` to be a single-cell
+#'   address (`"C4"`) and no cell to appear twice; both error out. Set to
+#'   `FALSE` to write one cell per request — needed for hand-built input using
+#'   multi-cell ranges, and useful for isolating which cell a failing patch is
+#'   choking on.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
-od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
+od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
+                        use_blocks = TRUE) {
 
   if (is.null(od)) od <- od()
 
@@ -1243,20 +1351,32 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
     on.exit(xl_protect(item, sheets), add = TRUE)
   }
 
-  x$sheet_enc <- utils::URLencode(x$sheet, reserved = TRUE)
+  req <- if (use_blocks) {
+    xl_patch_blocks(x)
+  } else {
+    tibble::tibble(sheet = x$sheet, address = x$range,
+                   values = lapply(x$new, \(v) list(list(v))))
+  }
 
-  purrr::pmap(x, \(sheet_enc, range, new, ...) {
+  # URLencode() is scalar-only, so encode per sheet rather than on the column
+  req$sheet_enc <- vapply(req$sheet, utils::URLencode, character(1),
+                          reserved = TRUE, USE.NAMES = FALSE)
+
+  purrr::pwalk(req[c("sheet_enc", "address", "values")],
+               \(sheet_enc, address, values) {
     graph_retry(\() item$do_operation(
       stringr::str_glue(
-        "workbook/worksheets('{sheet_enc}')/range(address='{range}')"
+        "workbook/worksheets('{sheet_enc}')/range(address='{address}')"
       ),
       http_verb = "PATCH",
-      body = list(values = list(list(new))),
+      body = list(values = values),
       encode = "json"
     ))
   }, .progress = "Patching values")
 
-  cli::cli_alert_success("Patched {nrow(x)} cell{?s} in {.val {path}}")
+  cli::cli_alert_success(
+    "Patched {nrow(x)} cell{?s} in {.val {path}} ({nrow(req)} request{?s})"
+  )
   invisible(item)
 }
 
@@ -1286,6 +1406,9 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 #' @param coerce_tz Forwarded to [od_xl_compare()]. Timezone to coerce
 #'   workbook POSIXct columns to. Default `"America/New_York"`; `NULL` to
 #'   skip.
+#' @param use_blocks Forwarded to [od_xl_patch()]. `TRUE` (default) batches
+#'   contiguous changed cells into rectangular range writes; `FALSE` patches
+#'   one cell per request.
 #'
 #' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
 #'   remove)`).
@@ -1293,12 +1416,13 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE) {
 #' @md
 od_xl_sync <- function(x, path, id_cols, od = NULL, table = "Table1",
                        remove = FALSE, unprotect = FALSE, wb_types = NULL,
-                       coerce_tz = "America/New_York") {
+                       coerce_tz = "America/New_York", use_blocks = TRUE) {
 
   cmp <- od_xl_compare(x, path, table = table, id_cols = id_cols,
                        wb_types = wb_types, od = od, coerce_tz = coerce_tz)
 
-  od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect)
+  od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect,
+              use_blocks = use_blocks)
 
   if (remove) {
     od_xl_remove(cmp$remove, path, table = table, od = od,
