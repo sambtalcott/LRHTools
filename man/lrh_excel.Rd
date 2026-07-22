@@ -19,7 +19,8 @@ lrh_excel(
 \item{x}{a dataframe or list of dataframes. Lazy tibbles are accepted and will
 be fetched using \code{collect()}}
 
-\item{widths}{column widths (default: auto)}
+\item{widths}{column widths: either \code{"auto"} (default) or a numeric vector,
+recycled across columns.}
 
 \item{table_style}{Excel table style (default: gray/striped)}
 

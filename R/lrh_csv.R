@@ -40,7 +40,8 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, sep = ",",
 #'
 #' @param x a dataframe or list of dataframes. Lazy tibbles are accepted and will
 #' be fetched using `collect()`
-#' @param widths column widths (default: auto)
+#' @param widths column widths: either `"auto"` (default) or a numeric vector,
+#' recycled across columns.
 #' @param table_style Excel table style (default: gray/striped)
 #' @param wrap Should columns be word-wrapped? (default: TRUE)
 #' @param file path to write to (defaults to tempfile)
@@ -60,6 +61,21 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
 
   # Evaluate now (before temp file is created)
   force(open)
+
+  # `widths` is the 2nd positional argument and `file` the 4th, so a path passed
+  # positionally silently binds to `widths` and then dies deep inside
+  # openxlsx2::calc_col_width() with "missing value where TRUE/FALSE needed"
+  # (as.numeric() of a non-numeric string is NA, and there is no NA guard there).
+  # Fail here, naming the argument, instead.
+  if (!identical(widths, "auto") && !is.numeric(widths)) {
+    cli::cli_abort(c(
+      "{.arg widths} must be {.val auto} or numeric, not {.obj_type_friendly {widths}}.",
+      i = if (is.character(widths) && length(widths) == 1 &&
+              grepl("\\.(xlsx|csv)$", widths)) {
+        "Did you mean {.code file = \"{widths}\"}?"
+      }
+    ))
+  }
 
   # Get x to be a list of dataframes (if only a single dataframe was provided)
   if (!inherits(x, "list")) x <- list(x)
