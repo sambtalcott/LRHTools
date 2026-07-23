@@ -50,6 +50,7 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, sep = ",",
 #' @param na what NA values are written as
 #' @param return_wb Should this return the openxlsx2 workbook object? If FALSE
 #' returns the path instead.
+#' @param overwrite Should an existing file be overwritten? (default: TRUE)
 #'
 #' @returns the path, invisibly
 #' @export
@@ -57,7 +58,7 @@ lrh_csv <- function(x, file, na = "", row.names = FALSE, sep = ",",
 #' @md
 lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
                       wrap = TRUE, file = NULL, open = is.null(file), na = "",
-                      return_wb = FALSE) {
+                      return_wb = FALSE, overwrite = TRUE) {
 
   # Evaluate now (before temp file is created)
   force(open)
@@ -123,7 +124,7 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
   if (is.null(file)) file <- tempfile(fileext = ".xlsx")
 
   # Save with retries (transient AV/endpoint-security locks on fresh zips)
-  wb_save_retry(wb, file)
+  wb_save_retry(wb, file, overwrite = overwrite)
 
   if (open) shell.exec(file)
 

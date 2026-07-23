@@ -12,7 +12,8 @@ lrh_excel(
   file = NULL,
   open = is.null(file),
   na = "",
-  return_wb = FALSE
+  return_wb = FALSE,
+  overwrite = TRUE
 )
 }
 \arguments{
@@ -35,6 +36,8 @@ other files}
 
 \item{return_wb}{Should this return the openxlsx2 workbook object? If FALSE
 returns the path instead.}
+
+\item{overwrite}{Should an existing file be overwritten? (default: TRUE)}
 }
 \value{
 the path, invisibly
