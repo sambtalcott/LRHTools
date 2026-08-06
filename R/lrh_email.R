@@ -15,6 +15,7 @@
 #'   the shared mailbox so replies skip personal inboxes)
 #' @param send Should the email be sent? If `FALSE`, the email is left as a
 #'   draft (useful for reviewing before a first live run).
+#' @param secure If `TRUE`, appends " \[SECURE]" to the email subject.
 #'
 #' @returns The `ms_outlook_email` object, invisibly
 #' @export
@@ -30,7 +31,7 @@
 #' }
 lrh_email <- function(body, subject, to, cc = NULL, attachments = NULL,
                       from = "QualityServiceDept@lrhcares.org",
-                      reply_to = NULL, send = TRUE) {
+                      reply_to = NULL, send = TRUE, secure = TRUE) {
 
   ol <- suppressMessages(Microsoft365R::get_business_outlook())
 
@@ -41,6 +42,11 @@ lrh_email <- function(body, subject, to, cc = NULL, attachments = NULL,
       cli::cli_abort("Attachment {.file {a}} does not exist")
     }
     em_bl <- blastula::add_attachment(em_bl, a)
+  }
+
+  # avoids appending [SECURE] if it's already in the subject
+  if (secure && !grepl('secure', tolower(subject))) {
+    subject <- paste0(subject, " [SECURE]")
   }
 
   args <- list(em_bl, subject = subject, to = to)

@@ -12,7 +12,8 @@ lrh_email(
   attachments = NULL,
   from = "QualityServiceDept@lrhcares.org",
   reply_to = NULL,
-  send = TRUE
+  send = TRUE,
+  secure = TRUE
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ the shared mailbox so replies skip personal inboxes)}
 
 \item{send}{Should the email be sent? If \code{FALSE}, the email is left as a
 draft (useful for reviewing before a first live run).}
+
+\item{secure}{If \code{TRUE}, appends " [SECURE]" to the email subject.}
 }
 \value{
 The \code{ms_outlook_email} object, invisibly
