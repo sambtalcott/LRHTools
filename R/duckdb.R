@@ -59,9 +59,10 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   } else {
     cli::cli_abort("{.arg type} must be one of {.val read_only}, {.val read_write}, or {.val any}")
   }
+  con_type <- if (ro) "read_only" else "read_write"
 
   # If existing matching connection, return it
-  if (!is.null(.ddb_env$con) && (.ddb_env$con_type == type || type == "any")) {
+  if (!is.null(.ddb_env$con) && (.ddb_env$con_type == con_type || type == "any")) {
     return (.ddb_env$con)
   }
 
@@ -69,9 +70,9 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   prev_type <- .ddb_env$con_type
 
   # If existing non-matching connection, close it
-  if (!is.null(.ddb_env$con) && .ddb_env$con_type != type) {
+  if (!is.null(.ddb_env$con)) {
     lrh_disconnect()
-    cli::cli_alert_info("Switching connection to {.val {type}}")
+    cli::cli_alert_info("Switching connection to {.val {con_type}}")
   }
 
   # Create temp directory if it doesn't exist
@@ -85,7 +86,7 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   .ddb_env$con <- DBI::dbConnect(.ddb_env$drv,
     timezone_out = timezone_out, tz_out_convert = tz_out_convert, ...
   )
-  .ddb_env$con_type <- type
+  .ddb_env$con_type <- con_type
 
   # If anything below fails, clean up the in-memory connection so the next
   # call to lrh_con() doesn't return a connection with no database attached
@@ -119,7 +120,7 @@ lrh_con <- function(db_file = lrh_db(), timezone_out = "America/New_York",
   }, error = \(e) {
     lrh_disconnect()
     # If we were switching from an existing connection, try to restore it
-    if (!is.null(prev_type) && prev_type != type) {
+    if (!is.null(prev_type) && prev_type != con_type) {
       tryCatch(
         lrh_con(type = prev_type),
         error = \(re) cli::cli_warn("Could not restore previous {.val {prev_type}} connection")
@@ -514,16 +515,65 @@ lastupdate_min_duckdb <- function(table, min_dt, dt_col = NULL) {
 #'
 #' @param view name of the view to materialize
 #' @param table name of the table to create
-#' @param con Connection to use. Defaults to [lrh_con()]
 #' @param quiet If TRUE doesn't display the success message
+#' @param materialized_col Add a column `materialized` with the current date-time?
 #'
 #' @returns tbl(con, table), invisibly
 #' @export
 #' @md
-materialize <- function(view, table, con = lrh_con(), quiet = FALSE) {
-    DBI::dbExecute(con, stringr::str_glue("CREATE OR REPLACE TABLE {table} AS SELECT * FROM {view}"))
-    DBI::dbExecute(con, "CHECKPOINT")
-    gc()
-    if (!quiet) cli::cli_alert_success("Materialized {.var {table}}")
-    invisible(dplyr::tbl(con, table))
+materialize <- function(view, table, quiet = FALSE, materialized_col = FALSE) {
+
+  # Restore previous connection type on exit if it was read_only
+  prev_type <- .ddb_env$con_type
+  on.exit(if (identical(prev_type, "read_only")) lrh_con(type = "read_only"), add = TRUE)
+
+  # Connect to the DuckDB database in read_write
+  con <- lrh_con(type = "read_write")
+
+  if (materialized_col) {
+    s <- "*, NOW() AS materialized"
+  } else {
+    s <- "*"
   }
+  DBI::dbExecute(con, stringr::str_glue("CREATE OR REPLACE TABLE {table} AS SELECT {s} FROM {view}"))
+  DBI::dbExecute(con, "CHECKPOINT")
+  gc()
+  if (!quiet) cli::cli_alert_success("Materialized {.var {table}}")
+
+  # Clear exit handler and run now
+  on.exit()
+  if (identical(prev_type, "read_only")) con <- lrh_con(type = "read_only")
+
+  invisible(dplyr::tbl(con, table))
+}
+
+#' Check materialization date
+#'
+#' @param table table to check
+#' @param dt date it should be after
+#' @param dt_col defaults to "materialized"
+#' @param con connection
+#'
+#' @returns TRUE or FALSE
+#' @export
+#'
+#' @md
+materialized_after <- function(table, dt, dt_col = "materialized", con = lrh_con()) {
+
+  # Coerce to date-time
+  if (inherits(dt, "Date")) dt <- as.POSIXct(format(dt), tz = Sys.timezone())
+
+  t <- dplyr::tbl(con, table)
+
+  if (!dt_col %in% colnames(t)) {
+    cli::cli_abort("Table {.val {table}} doesn't contain column {.val {dt_col}}")
+  }
+
+  m <- dplyr::select(t, dplyr::all_of(dt_col)) |> dplyr::distinct() |> dplyr::pull()
+
+  if (length(m) != 1 || !inherits(m, "POSIXt")) {
+    cli::cli_abort(c("x" = "{.val {dt_col}} Needs to contain a single date-time",
+                     "i" = "Current value(s): {.val {m}}"))
+  }
+  m >= dt
+}

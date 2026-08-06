@@ -4,16 +4,16 @@
 \alias{materialize}
 \title{Materialize a view}
 \usage{
-materialize(view, table, con = lrh_con(), quiet = FALSE)
+materialize(view, table, quiet = FALSE, materialized_col = FALSE)
 }
 \arguments{
 \item{view}{name of the view to materialize}
 
 \item{table}{name of the table to create}
 
-\item{con}{Connection to use. Defaults to \code{\link[=lrh_con]{lrh_con()}}}
-
 \item{quiet}{If TRUE doesn't display the success message}
+
+\item{materialized_col}{Add a column \code{materialized} with the current date-time?}
 }
 \value{
 tbl(con, table), invisibly
