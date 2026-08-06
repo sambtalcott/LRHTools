@@ -107,6 +107,36 @@ test_that("sql_age handles birthdays, boundaries and leap-day births", {
   expect_equal(res$age_mar01, 25)
 })
 
+test_that("sql() expressions pass through instead of collapsing to the call name", {
+  con <- lrh_con(db_file = ":memory:", type = "read_write")
+  on.exit(lrh_disconnect(), add = TRUE)
+  make_probe(con)
+
+  # A captured call like sql("NOW()") used to be run through as.character(),
+  # which yields c("sql", "NOW()") and silently quoted the function name.
+  expect_match(as.character(sql_as_date(dplyr::sql("NOW()"))), "NOW()", fixed = TRUE)
+  expect_false(grepl('"sql"', sql_as_date(dplyr::sql("NOW()")), fixed = TRUE))
+  expect_false(grepl('"sql"', sql_mo(dplyr::sql("NOW()")), fixed = TRUE))
+  expect_false(grepl('"sql"', sql_age(dplyr::sql("NOW()"), dob), fixed = TRUE))
+
+  res <- dplyr::tbl(con, "DT_PROBE") |>
+    dplyr::mutate(
+      # age today from a SQL expression, and from a literal timestamp
+      age_now = !!sql_age(dplyr::sql("NOW()"), dob),
+      age_lit = !!sql_age(dplyr::sql("TIMESTAMPTZ '2025-06-15 03:00:00+00'"), dob),
+      mo_expr = !!sql_mo(dplyr::sql("mo_tstz"))
+    ) |>
+    dplyr::collect()
+
+  expect_equal(res$age_now, age(Sys.Date(), as.Date("2000-06-15")))
+  expect_equal(res$age_lit, 24)
+  expect_equal(res$mo_expr, as.Date("2025-01-01"))
+})
+
+test_that("quote_col rejects values that are neither a column nor sql()", {
+  expect_error(sql_as_date(1:3), "column name")
+})
+
 test_that("results do not depend on the session TimeZone", {
   con <- lrh_con(db_file = ":memory:", type = "read_write")
   on.exit(lrh_disconnect(), add = TRUE)

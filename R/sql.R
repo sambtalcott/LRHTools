@@ -1,8 +1,27 @@
 
 # Helper to quote column names for SQL (handles spaces and special characters)
-quote_col <- function(x) {
+#
+# `x` is normally an expression captured with enexpr(), so it can be a symbol
+# (bare column name), a string, an already-built `sql()` object, or a *call*
+# such as `sql("NOW()")`. Calls must be evaluated in the caller's environment
+# first: as.character() on a call returns its parts ("sql", "NOW()"), which
+# used to silently collapse to the function name.
+quote_col <- function(x, env = rlang::caller_env()) {
   if (inherits(x, "sql")) return(x)
-  x <- as.character(x)
+
+  if (rlang::is_call(x)) {
+    x <- eval(x, env)
+    if (inherits(x, "sql")) return(x)
+  }
+
+  if (rlang::is_symbol(x)) x <- rlang::as_name(x)
+
+  if (!is.character(x) || length(x) != 1) {
+    cli::cli_abort(
+      "{.arg x} must be a column name or a {.fn sql} expression, not {.obj_type_friendly {x}}."
+    )
+  }
+
   paste0('"', x, '"')
 }
 
@@ -37,11 +56,11 @@ sql_local_ts <- function(col_name, tz) {
 #' @export
 #' @md
 sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
-  x <- rlang::enexpr(x)
-  col_name <- if (rlang::is_call(x)) quote_col(eval(x)) else quote_col(x)
+  env <- rlang::caller_env()
+  col_name <- quote_col(rlang::enexpr(x), env)
 
   order_by <- rlang::enexpr(order_by)
-  order_col <- if (!is.null(order_by)) quote_col(order_by) else col_name
+  order_col <- if (!is.null(order_by)) quote_col(order_by, env) else col_name
 
   distinct_sql <- if (distinct) "DISTINCT " else ""
 
@@ -66,7 +85,7 @@ sql_flatten <- function(x, sep = "; ", distinct = TRUE, order_by = NULL) {
 #' @export
 #' @md
 sql_as_date <- function(x, tz = "America/New_York") {
-  col_name <- quote_col(rlang::enexpr(x))
+  col_name <- quote_col(rlang::enexpr(x), rlang::caller_env())
   local_ts <- sql_local_ts(col_name, tz)
   dplyr::sql(glue::glue("CAST({local_ts} AS DATE)"))
 }
@@ -74,7 +93,7 @@ sql_as_date <- function(x, tz = "America/New_York") {
 #' @export
 #' @rdname sql_as_date
 sql_mo <- function(x, tz = "America/New_York") {
-  col_name <- quote_col(rlang::enexpr(x))
+  col_name <- quote_col(rlang::enexpr(x), rlang::caller_env())
   local_ts <- sql_local_ts(col_name, tz)
   dplyr::sql(glue::glue("CAST(DATE_TRUNC('month', {local_ts}) AS DATE)"))
 }
@@ -91,7 +110,7 @@ sql_mo <- function(x, tz = "America/New_York") {
 #' @export
 #' @md
 sql_ce_dt_tm <- function(x, tz = "America/New_York") {
-  col_name <- quote_col(rlang::enexpr(x))
+  col_name <- quote_col(rlang::enexpr(x), rlang::caller_env())
   dplyr::sql(glue::glue(
     "STRPTIME(SUBSTR({col_name}, 3, 14) || '{tz}', '%Y%m%d%H%M%S%Z')"
   ))
@@ -112,7 +131,7 @@ ce_date <- function(x) {
 #' @rdname sql_ce_dt_tm
 #' @export
 sql_ce_date <- function(x) {
-  col_name <- quote_col(rlang::enexpr(x))
+  col_name <- quote_col(rlang::enexpr(x), rlang::caller_env())
   dplyr::sql(glue::glue(
     "STRPTIME(SUBSTR({col_name}, 3, 8), '%Y%m%d')::DATE"
   ))
@@ -137,8 +156,9 @@ sql_ce_date <- function(x) {
 #' @md
 sql_age <- function(dt, dob, tz = "America/New_York") {
 
-  dt <- quote_col(rlang::enexpr(dt))
-  dob <- quote_col(rlang::enexpr(dob))
+  env <- rlang::caller_env()
+  dt <- quote_col(rlang::enexpr(dt), env)
+  dob <- quote_col(rlang::enexpr(dob), env)
 
   dt_d <- glue::glue("CAST({sql_local_ts(dt, tz)} AS DATE)")
   dob_d <- glue::glue("CAST({sql_local_ts(dob, tz)} AS DATE)")
