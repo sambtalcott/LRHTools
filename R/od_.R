@@ -394,9 +394,9 @@ process_type <- function(ext, type) {
   # Extensions and associated types
   file_types <- list(
     ".csv" = "dataframe", ".csv2" = "dataframe", ".tsv" = "dataframe",
-    ".xlsx" = "xlsx",".xls" = "xlsx", ".rds" = "rds",
+    ".xlsx" = "xlsx",".xls" = "xlsx", ".xlsm" = "xlsx", ".rds" = "rds",
     ".txt" = "lines", ".html" = "lines",
-    "wb" = "wb" # Must be manually specified for .xlsx
+    "wb" = "wb" # Must be manually specified for .xlsx/.xlsm
   )
 
   possible_types <- unique(unlist(file_types))
@@ -432,7 +432,8 @@ process_type <- function(ext, type) {
 #' folder/drive set by [od_default()] or with a specified folder/drive.
 #'
 #' Currently supported file types include: `.csv`, `.csv2`, `.tsv`, `.xls`,
-#' `.xlsx`, `.rds`, `.txt`, `.html`
+#' `.xlsx`, `.xlsm`, `.rds`, `.txt`, `.html`. Note that `.xlsm` can be read but
+#' not written by `od_write()` — see [od_xl_sync()] for editing one in place.
 #'
 #' These functions will attempt to use the appropriate read/write function based
 #' on the file extension, however this can be overridden by specifying type.
@@ -540,9 +541,9 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
 od_read_xlsx <- function(path, od, type, ...) {
   ext <- get_ext(path)
 
-  if (!ext %in% c(".xlsx", ".xls")) {
+  if (!ext %in% c(".xlsx", ".xlsm", ".xls")) {
     cli::cli_abort(
-      "Files must be {.val .xlsx} or {.val .xls} to read as a {.val {type}}",
+      "Files must be {.val .xlsx}, {.val .xlsm}, or {.val .xls} to read as a {.val {type}}",
       i = "Current file: {.val {path}}"
     )
   }
@@ -581,6 +582,32 @@ od_read_lines <- function(path, od, ...) {
       "i" = "Run {.code install.packages('readr')} to install"
     ))
   }
+}
+
+#' Extensions the workbook (`od_xl_*`) functions accept
+#'
+#' Both formats are backed by the same Open XML package, so the Graph workbook
+#' endpoints and [openxlsx2::wb_load()] treat them identically. `.xlsm` is
+#' included so macro-enabled trackers can be synced; the macros ride along
+#' untouched because these functions edit cells in place rather than rewriting
+#' the file. `.xls` is excluded — it is the old binary format, which Graph's
+#' workbook API does not support.
+#'
+#' @keywords internal
+xl_exts <- c(".xlsx", ".xlsm")
+
+#' Abort unless `path` points at a workbook the od_xl_* functions can edit
+#'
+#' @param path Path being operated on
+#' @param fn Name of the calling function, for the error message
+#'
+#' @returns NULL, invisibly (called for its side effect)
+check_xl_ext <- function(path, fn) {
+  if (!get_ext(path) %in% xl_exts) cli::cli_abort(c(
+    "x" = "{.var {fn}} can only be used on {.val {xl_exts}} files",
+    "i" = "Current file: {.val {path}}"
+  ))
+  invisible(NULL)
 }
 
 #' Unprotect sheets, run an expression, then re-protect
@@ -749,9 +776,7 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
   if (!od_exists(path, od)) cli::cli_abort(c(
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_append()} can only be used on .xlsx files"
-  ))
+  check_xl_ext(path, "od_xl_append()")
 
   item <- od$get_item(path)
 
@@ -833,9 +858,7 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
   if (!od_exists(path, od)) cli::cli_abort(c(
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_sort()} can only be used on .xlsx files"
-  ))
+  check_xl_ext(path, "od_xl_sort()")
 
   item <- od$get_item(path)
 
@@ -960,9 +983,7 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
   if (!od_exists(path, od)) cli::cli_abort(c(
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_compare()} can only be used on .xlsx files"
-  ))
+  check_xl_ext(path, "od_xl_compare()")
 
   # Coerce types that won't survive the compare's anti_join
   x <- dplyr::mutate(x,
@@ -1152,9 +1173,7 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
   if (!od_exists(path, od)) cli::cli_abort(c(
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_remove()} can only be used on .xlsx files"
-  ))
+  check_xl_ext(path, "od_xl_remove()")
 
   # Error checking: x
   if (!"index" %in% colnames(x)) cli::cli_abort(c(
@@ -1322,9 +1341,7 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
   if (!od_exists(path, od)) cli::cli_abort(c(
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
-  if (get_ext(path) != ".xlsx") cli::cli_abort(c(
-    "x" = "{.var od_xl_patch()} can only be used on .xlsx files"
-  ))
+  check_xl_ext(path, "od_xl_patch()")
 
   # Error checking: x
   required <- c("sheet", "range", "new")
@@ -1384,7 +1401,8 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #'
 #' Convenience wrapper around [od_xl_compare()] + [od_xl_patch()] +
 #' (optionally) [od_xl_remove()] + [od_xl_append()]. Works while the file is
-#' open in Excel.
+#' open in Excel, and on `.xlsm` as well as `.xlsx` — cells are edited in
+#' place, so a macro-enabled workbook keeps its macros.
 #'
 #' Type coercion of `x` (factors → character, difftime/hms/Duration →
 #' numeric), `wb_types` auto-inference, and `coerce_tz` handling are all
@@ -1492,8 +1510,11 @@ od_write <- function(x, path, od = NULL, on_locked = "prompt", ...) {
     args <- c(list(df = x, file = path), args)
     rlang::exec(od$save_dataframe, !!!args)
   } else if (type == "xlsx") {
+    # Deliberately narrower than the od_xl_* functions: od_write() rebuilds the
+    # whole file, which would strip the macros from an .xlsm.
     if (ext != ".xlsx") cli::cli_abort(c(
-      "{.code od_write()} can only write Excel documents to {.val .xlsx} files"
+      "{.code od_write()} can only write Excel documents to {.val .xlsx} files",
+      "i" = "For {.val .xlsm}, edit in place with {.code od_xl_sync()} instead"
     ))
     od_write_xlsx(x, path, od, ...) # Creates folders -- no error catching needed
   }

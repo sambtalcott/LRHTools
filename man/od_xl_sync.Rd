@@ -53,7 +53,8 @@ The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(a
 \description{
 Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code{\link[=od_xl_patch]{od_xl_patch()}} +
 (optionally) \code{\link[=od_xl_remove]{od_xl_remove()}} + \code{\link[=od_xl_append]{od_xl_append()}}. Works while the file is
-open in Excel.
+open in Excel, and on \code{.xlsm} as well as \code{.xlsx} — cells are edited in
+place, so a macro-enabled workbook keeps its macros.
 }
 \details{
 Type coercion of \code{x} (factors → character, difftime/hms/Duration →

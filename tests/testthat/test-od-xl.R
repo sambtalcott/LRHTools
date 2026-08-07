@@ -362,8 +362,36 @@ test_that("compare errors on non-xlsx path", {
 
   expect_error(
     od_xl_compare(data.frame(), "test.csv", "T", id_cols = "id", od = list()),
-    "can only be used on .xlsx"
+    "can only be used on"
   )
+})
+
+test_that("check_xl_ext accepts .xlsx and .xlsm but not .xls or other types", {
+  expect_null(check_xl_ext("a.xlsx", "f()"))
+  expect_null(check_xl_ext("a.xlsm", "f()"))
+
+  # .xls is the old binary format; Graph's workbook API can't touch it
+  expect_error(check_xl_ext("a.xls", "f()"), "can only be used on")
+  expect_error(check_xl_ext("a.csv", "f()"), "can only be used on")
+
+  # the calling function's name should make it into the message
+  expect_error(check_xl_ext("a.csv", "od_xl_sort()"), "od_xl_sort")
+})
+
+test_that("compare works on an .xlsm path", {
+  wb_df <- data.frame(id = 1, val = "a")
+  wb <- make_test_wb(wb_df)
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  res <- od_xl_compare(data.frame(id = 2, val = "b"), "macros.xlsm",
+                       "testtable", id_cols = "id", od = list())
+
+  expect_equal(nrow(res$append), 1)
+  expect_equal(res$append$id, 2)
 })
 
 test_that("compare errors on missing table", {
@@ -575,7 +603,7 @@ test_that("patch errors on non-xlsx path", {
 
   expect_error(
     od_xl_patch(data.frame(sheet = "S", range = "A1", new = "x"), "f.csv", od = list()),
-    "can only be used on .xlsx"
+    "can only be used on"
   )
 })
 

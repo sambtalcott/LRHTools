@@ -36,7 +36,8 @@ Read or write data to/from a OneDrive Folder. Can be used with default
 folder/drive set by \code{\link[=od_default]{od_default()}} or with a specified folder/drive.
 
 Currently supported file types include: \code{.csv}, \code{.csv2}, \code{.tsv}, \code{.xls},
-\code{.xlsx}, \code{.rds}, \code{.txt}, \code{.html}
+\code{.xlsx}, \code{.xlsm}, \code{.rds}, \code{.txt}, \code{.html}. Note that \code{.xlsm} can be read but
+not written by \code{od_write()} — see \code{\link[=od_xl_sync]{od_xl_sync()}} for editing one in place.
 
 These functions will attempt to use the appropriate read/write function based
 on the file extension, however this can be overridden by specifying type.
