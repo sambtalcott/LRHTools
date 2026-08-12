@@ -15,7 +15,7 @@
 #'
 #' RStudio's preview pane silently shows nothing when a statement fails, so the
 #' statement is first validated with `EXPLAIN` (which parses and binds the query
-#' without running it) and any database error is raised in the console.
+#' without running it) and any database error is printed to the console.
 #'
 #' @param validate Whether to `EXPLAIN` the statement first to surface database
 #'   errors. Set `FALSE` for a backend where `EXPLAIN` is unsupported.
@@ -58,7 +58,9 @@ preview_sql_selection <- function(validate = TRUE) {
   }
 
   # previewSql() shows an empty pane and no message when the statement fails,
-  # so bind-check it here and report the database error ourselves.
+  # so bind-check it here and report the database error ourselves. Reported as
+  # a message rather than an error: RStudio throws a modal dialog on top of the
+  # console output whenever an addin signals an error condition.
   if (isTRUE(validate)) {
     err <- tryCatch(
       {
@@ -68,14 +70,9 @@ preview_sql_selection <- function(validate = TRUE) {
       error = function(e) conditionMessage(e)
     )
     if (!is.null(err)) {
-      cli::cli_abort(
-        c(
-          "SQL error:",
-          "x" = err,
-          "i" = "Statement was not previewed."
-        ),
-        call = NULL
-      )
+      cli::cli_alert_danger("SQL error - statement was not previewed.")
+      cli::cli_verbatim(err)
+      return(invisible(sql))
     }
   }
 

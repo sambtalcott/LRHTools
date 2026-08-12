@@ -30,5 +30,5 @@ searching for "Preview SQL Selection".
 
 RStudio's preview pane silently shows nothing when a statement fails, so the
 statement is first validated with `EXPLAIN` (which parses and binds the query
-without running it) and any database error is raised in the console.
+without running it) and any database error is printed to the console.
 }
