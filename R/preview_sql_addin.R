@@ -6,9 +6,15 @@
 #' statements are assumed to be separated by lines ending in ";".
 #'
 #' The connection is taken from the file's `-- !preview conn=...` header if one
-#' exists, otherwise [lrh_con()]. Note that previewing runs the SQL via
-#' `DBI::dbGetQuery()`, so select the SELECT body of a CREATE VIEW statement
-#' rather than the whole DDL.
+#' exists, otherwise [lrh_con()]. Previewing executes the SQL via
+#' `DBI::dbGetQuery()`, so previewing a `CREATE ... VIEW` statement on a
+#' read-write connection does write the view. That is supported. Preview the
+#' SELECT body instead if you want no side effect.
+#'
+#' Statements that return no rows (`CREATE`, `INSERT`, ...) would render as an
+#' empty preview tab, so they are run directly and the tab shows a one-row
+#' summary of the statement, its affected-row count where non-zero, and the
+#' time it completed.
 #'
 #' Bind to a keyboard shortcut via Tools > Modify Keyboard Shortcuts and
 #' searching for "Preview SQL Selection".
@@ -76,6 +82,63 @@ preview_sql_selection <- function(validate = TRUE) {
     }
   }
 
-  rstudioapi::previewSql(conn = con, statement = sql)
+  # A statement that returns no rows (CREATE, INSERT, ...) renders as an empty
+  # preview tab. Run it here instead and preview a one-row summary, so the tab
+  # confirms what happened. dbExecute() hands back the affected-row count, so
+  # this costs no extra round trip.
+  if (!sql_returns_rows(sql)) {
+    n <- DBI::dbExecute(con, sql)
+    rstudioapi::previewSql(conn = con, statement = sql_status_select(sql, n))
+    return(invisible(sql))
+  }
+
+  # previewSql() executes the statement via dbGetQuery(). Anything routed here
+  # returns rows, but if the classifier above is ever wrong duckdb warns that a
+  # non-SELECT result has nothing to fetch. The warning is deferred to the next
+  # top-level call, so it surfaces detached from its cause; muffle just that one.
+  withCallingHandlers(
+    rstudioapi::previewSql(conn = con, statement = sql),
+    warning = function(w) {
+      if (grepl("do not come from SELECT", conditionMessage(w), fixed = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
   invisible(sql)
+}
+
+# Leading keyword of a statement, ignoring comment lines, blank lines and any
+# opening parenthesis.
+sql_first_keyword <- function(sql) {
+  lines <- strsplit(sql, "\n")[[1]]
+  lines <- lines[!grepl("^\\s*(--.*)?$", lines)]
+  if (length(lines) == 0) return("")
+  tolower(sub("^[^[:alnum:]]*([[:alnum:]_]+).*$", "\\1", lines[1]))
+}
+
+# Whether a statement produces a result set worth rendering. Deliberately a
+# keyword check rather than a parse: the statement has already been bound by
+# EXPLAIN, and a wrong guess only costs an empty tab.
+sql_returns_rows <- function(sql) {
+  sql_first_keyword(sql) %in% c(
+    "select", "with", "from", "table", "values", "describe", "desc",
+    "summarize", "show", "pragma", "explain", "call", "pivot", "unpivot"
+  )
+}
+
+# A one-row SELECT describing a statement that returned no rows, for display in
+# the preview tab.
+sql_status_select <- function(sql, n = 0L) {
+  lines <- strsplit(sql, "\n")[[1]]
+  lines <- lines[!grepl("^\\s*(--.*)?$", lines)]
+  label <- if (length(lines) == 0) "statement" else trimws(lines[1])
+  if (nchar(label) > 80) label <- paste0(substr(label, 1, 77), "...")
+  quote_lit <- function(x) paste0("'", gsub("'", "''", x), "'")
+
+  parts <- c(
+    paste(quote_lit(label), "as statement"),
+    if (isTRUE(n > 0)) paste(format(n, scientific = FALSE), "as rows_affected"),
+    paste(quote_lit(format(Sys.time(), "%Y-%m-%d %H:%M:%S")), "as completed")
+  )
+  paste("select", paste(parts, collapse = ", "))
 }

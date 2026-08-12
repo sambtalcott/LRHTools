@@ -21,9 +21,15 @@ statements are assumed to be separated by lines ending in ";".
 }
 \details{
 The connection is taken from the file's `-- !preview conn=...` header if one
-exists, otherwise [lrh_con()]. Note that previewing runs the SQL via
-`DBI::dbGetQuery()`, so select the SELECT body of a CREATE VIEW statement
-rather than the whole DDL.
+exists, otherwise [lrh_con()]. Previewing executes the SQL via
+`DBI::dbGetQuery()`, so previewing a `CREATE ... VIEW` statement on a
+read-write connection does write the view. That is supported. Preview the
+SELECT body instead if you want no side effect.
+
+Statements that return no rows (`CREATE`, `INSERT`, ...) would render as an
+empty preview tab, so they are run directly and the tab shows a one-row
+summary of the statement, its affected-row count where non-zero, and the
+time it completed.
 
 Bind to a keyboard shortcut via Tools > Modify Keyboard Shortcuts and
 searching for "Preview SQL Selection".
