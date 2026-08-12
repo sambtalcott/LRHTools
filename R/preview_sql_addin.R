@@ -13,9 +13,16 @@
 #' Bind to a keyboard shortcut via Tools > Modify Keyboard Shortcuts and
 #' searching for "Preview SQL Selection".
 #'
+#' RStudio's preview pane silently shows nothing when a statement fails, so the
+#' statement is first validated with `EXPLAIN` (which parses and binds the query
+#' without running it) and any database error is raised in the console.
+#'
+#' @param validate Whether to `EXPLAIN` the statement first to surface database
+#'   errors. Set `FALSE` for a backend where `EXPLAIN` is unsupported.
+#'
 #' @returns Invisibly, the SQL string sent to the preview pane
 #' @export
-preview_sql_selection <- function() {
+preview_sql_selection <- function(validate = TRUE) {
   ctx <- rstudioapi::getSourceEditorContext()
   if (is.null(ctx)) cli::cli_abort("No active source editor.")
 
@@ -48,6 +55,28 @@ preview_sql_selection <- function() {
     con <- eval(parse(text = conn_expr), envir = globalenv())
   } else {
     con <- lrh_con()
+  }
+
+  # previewSql() shows an empty pane and no message when the statement fails,
+  # so bind-check it here and report the database error ourselves.
+  if (isTRUE(validate)) {
+    err <- tryCatch(
+      {
+        DBI::dbGetQuery(con, paste0("EXPLAIN ", sub(";\\s*$", "", trimws(sql))))
+        NULL
+      },
+      error = function(e) conditionMessage(e)
+    )
+    if (!is.null(err)) {
+      cli::cli_abort(
+        c(
+          "SQL error:",
+          "x" = err,
+          "i" = "Statement was not previewed."
+        ),
+        call = NULL
+      )
+    }
   }
 
   rstudioapi::previewSql(conn = con, statement = sql)

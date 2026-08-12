@@ -4,7 +4,11 @@
 \alias{preview_sql_selection}
 \title{Preview Selected SQL}
 \usage{
-preview_sql_selection()
+preview_sql_selection(validate = TRUE)
+}
+\arguments{
+\item{validate}{Whether to `EXPLAIN` the statement first to surface database
+errors. Set `FALSE` for a backend where `EXPLAIN` is unsupported.}
 }
 \value{
 Invisibly, the SQL string sent to the preview pane
@@ -23,4 +27,8 @@ rather than the whole DDL.
 
 Bind to a keyboard shortcut via Tools > Modify Keyboard Shortcuts and
 searching for "Preview SQL Selection".
+
+RStudio's preview pane silently shows nothing when a statement fails, so the
+statement is first validated with `EXPLAIN` (which parses and binds the query
+without running it) and any database error is raised in the console.
 }
