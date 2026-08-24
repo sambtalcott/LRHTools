@@ -28,7 +28,7 @@ ppt_as_dml <- function(content) {
 #' @md
 #' @export
 ppt_lrh <- function(title = NULL, subtitle = NULL,
-                    template_loc = "~/Custom Office Templates/LRH Data PPT Template.potx") {
+                    template_loc = "~/Custom Office Templates/LRH Quality PPT Template.potx") {
 
   p <- officer::read_pptx(template_loc)
   if (!is.null(title)) {
