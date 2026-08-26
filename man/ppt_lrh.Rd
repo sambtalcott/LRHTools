@@ -7,7 +7,7 @@
 ppt_lrh(
   title = NULL,
   subtitle = NULL,
-  template_loc = "~/Custom Office Templates/LRH Data PPT Template.potx"
+  template_loc = "~/Custom Office Templates/LRH Quality PPT Template.potx"
 )
 }
 \arguments{
