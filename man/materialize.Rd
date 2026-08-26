@@ -4,7 +4,14 @@
 \alias{materialize}
 \title{Materialize a view}
 \usage{
-materialize(view, table, quiet = FALSE, materialized_col = FALSE)
+materialize(
+  view,
+  table,
+  quiet = FALSE,
+  materialized_col = FALSE,
+  check = TRUE,
+  on_violation = c("prompt", "abort", "warn")
+)
 }
 \arguments{
 \item{view}{name of the view to materialize}
@@ -14,10 +21,28 @@ materialize(view, table, quiet = FALSE, materialized_col = FALSE)
 \item{quiet}{If TRUE doesn't display the success message}
 
 \item{materialized_col}{Add a column \code{materialized} with the current date-time?}
+
+\item{check}{Run the pre-flight checks? Defaults to TRUE.}
+
+\item{on_violation}{What to do when a pre-flight check fails. \code{"prompt"}
+(the default) asks whether to continue in an interactive session and
+warns-and-continues otherwise; \code{"abort"} always errors; \code{"warn"} always
+continues.}
 }
 \value{
 tbl(con, table), invisibly
 }
 \description{
-Materialize a view
+Runs \verb{CREATE OR REPLACE TABLE \{table\} AS SELECT * FROM \{view\}}.
+}
+\details{
+Unless \code{check = FALSE}, a set of pre-flight checks runs first:
+\itemize{
+\item \code{view} exists in the database, and is a view (not a table)
+\item \code{table}, if it already exists, is a table (not a view)
+\item the existing table's columns match the view's columns (plus
+\code{materialized} when \code{materialized_col = TRUE}) in name, order and type
+}
+
+A \code{table} that doesn't exist yet is reported but is not a violation.
 }

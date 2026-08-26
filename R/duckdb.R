@@ -513,15 +513,33 @@ lastupdate_min_duckdb <- function(table, min_dt, dt_col = NULL) {
 
 #' Materialize a view
 #'
+#' Runs `CREATE OR REPLACE TABLE {table} AS SELECT * FROM {view}`.
+#'
+#' Unless `check = FALSE`, a set of pre-flight checks runs first:
+#' * `view` exists in the database, and is a view (not a table)
+#' * `table`, if it already exists, is a table (not a view)
+#' * the existing table's columns match the view's columns (plus
+#'   `materialized` when `materialized_col = TRUE`) in name, order and type
+#'
+#' A `table` that doesn't exist yet is reported but is not a violation.
+#'
 #' @param view name of the view to materialize
 #' @param table name of the table to create
 #' @param quiet If TRUE doesn't display the success message
 #' @param materialized_col Add a column `materialized` with the current date-time?
+#' @param check Run the pre-flight checks? Defaults to TRUE.
+#' @param on_violation What to do when a pre-flight check fails. `"prompt"`
+#'   (the default) asks whether to continue in an interactive session and
+#'   warns-and-continues otherwise; `"abort"` always errors; `"warn"` always
+#'   continues.
 #'
 #' @returns tbl(con, table), invisibly
 #' @export
 #' @md
-materialize <- function(view, table, quiet = FALSE, materialized_col = FALSE) {
+materialize <- function(view, table, quiet = FALSE, materialized_col = FALSE,
+                        check = TRUE, on_violation = c("prompt", "abort", "warn")) {
+
+  on_violation <- match.arg(on_violation)
 
   # Restore previous connection type on exit if it was read_only
   prev_type <- .ddb_env$con_type
@@ -529,6 +547,10 @@ materialize <- function(view, table, quiet = FALSE, materialized_col = FALSE) {
 
   # Connect to the DuckDB database in read_write
   con <- lrh_con(type = "read_write")
+
+  if (check) {
+    materialize_preflight(view, table, materialized_col, on_violation, con)
+  }
 
   if (materialized_col) {
     s <- "*, NOW() AS materialized"
@@ -545,6 +567,150 @@ materialize <- function(view, table, quiet = FALSE, materialized_col = FALSE) {
   if (identical(prev_type, "read_only")) con <- lrh_con(type = "read_only")
 
   invisible(dplyr::tbl(con, table))
+}
+
+#' Look up a database object in the catalog
+#'
+#' @param x object name, optionally schema-qualified
+#' @param con connection
+#'
+#' @returns The object's `table_type` -- usually `"VIEW"` or `"BASE TABLE"` --
+#'   or `NA` if no such object exists
+#' @export
+#' @md
+#' @examples
+#' \dontrun{
+#' ddb_object_type("orders_view")   # "VIEW"
+#' ddb_object_type("orders_mview")  # "BASE TABLE"
+#' }
+ddb_object_type <- function(x, con = lrh_con()) {
+
+  parts <- strsplit(gsub('"', "", x, fixed = TRUE), ".", fixed = TRUE)[[1]]
+  nm <- utils::tail(parts, 1)
+  schema <- if (length(parts) > 1) parts[length(parts) - 1] else NULL
+
+  q <- paste0(
+    "SELECT table_type FROM information_schema.tables WHERE table_name = ",
+    DBI::dbQuoteString(con, nm),
+    if (!is.null(schema)) paste0(" AND table_schema = ", DBI::dbQuoteString(con, schema))
+  )
+
+  res <- DBI::dbGetQuery(con, q)[[1]]
+
+  if (length(res) == 0) NA_character_ else res[[1]]
+}
+
+#' Pre-flight checks for materialize()
+#'
+#' @inheritParams materialize
+#' @param con connection
+#'
+#' @returns invisible(TRUE) if clear, otherwise messages / prompts / aborts
+#' @noRd
+materialize_preflight <- function(view, table, materialized_col = FALSE,
+                                  on_violation = "prompt", con = lrh_con()) {
+
+  bullets <- character()
+
+  # -- Source must exist, and must be a view ---------------------------------
+  view_type <- ddb_object_type(view, con)
+  view_ok <- identical(view_type, "VIEW")
+
+  if (is.na(view_type)) {
+    bullets <- c(bullets, "x" = "Source {.val {view}} does not exist in the database")
+  } else if (!view_ok) {
+    bullets <- c(bullets, "x" = "Source {.val {view}} is a {.val {view_type}}, not a {.val VIEW}")
+  }
+
+  # -- Destination, if it exists, must be a table ----------------------------
+  table_type <- ddb_object_type(table, con)
+  table_ok <- identical(table_type, "BASE TABLE")
+
+  if (is.na(table_type)) {
+    cli::cli_inform(c("i" = "Table {.val {table}} does not exist yet and will be created"))
+  } else if (!table_ok) {
+    bullets <- c(bullets, "x" = "Destination {.val {table}} is a {.val {table_type}}, not a table")
+  }
+
+  # -- Columns must match ----------------------------------------------------
+  if (!is.na(view_type) && table_ok) {
+
+    v_cols <- ddb_columns(view, con)
+    if (materialized_col) {
+      v_cols <- dplyr::bind_rows(
+        v_cols,
+        data.frame(column_name = "materialized", column_type = "TIMESTAMP WITH TIME ZONE")
+      )
+    }
+    t_cols <- ddb_columns(table, con)
+
+    missing <- setdiff(v_cols$column_name, t_cols$column_name)
+    added   <- setdiff(t_cols$column_name, v_cols$column_name)
+
+    if (length(missing) > 0) {
+      bullets <- c(bullets, "x" = "New in {.val {view}}, not in {.val {table}}: {.val {missing}}")
+    }
+    if (length(added) > 0) {
+      bullets <- c(bullets, "x" = "In {.val {table}} but no longer in {.val {view}}: {.val {added}}")
+    }
+
+    # Order and type, for the columns present in both
+    both <- intersect(v_cols$column_name, t_cols$column_name)
+
+    if (length(missing) == 0 && length(added) == 0 &&
+        !identical(v_cols$column_name, t_cols$column_name)) {
+      bullets <- c(bullets, "!" = "Column {.emph order} differs between {.val {view}} and {.val {table}}")
+    }
+
+    v_type <- v_cols$column_type[match(both, v_cols$column_name)]
+    t_type <- t_cols$column_type[match(both, t_cols$column_name)]
+    i <- which(v_type != t_type)
+
+    if (length(i) > 0) {
+      changed <- paste0(both[i], " (", t_type[i], " -> ", v_type[i], ")")
+      bullets <- c(bullets, "!" = "Column type{?s} changed: {.val {changed}}")
+    }
+  }
+
+  if (length(bullets) == 0) return(invisible(TRUE))
+
+  bullets <- c(
+    "!" = "Pre-flight checks failed for {.code materialize(\"{view}\", \"{table}\")}",
+    bullets
+  )
+
+  if (on_violation == "abort") {
+    cli::cli_abort(bullets)
+  }
+
+  cli::cli_inform(bullets)
+
+  if (on_violation == "warn" || !interactive()) {
+    cli::cli_warn("Continuing anyway")
+    return(invisible(FALSE))
+  }
+
+  if (!isTRUE(utils::askYesNo("Materialize anyway?", default = FALSE))) {
+    cli::cli_abort("Materialization of {.val {table}} cancelled")
+  }
+
+  invisible(FALSE)
+}
+
+#' Column names and types of a table or view
+#'
+#' @param x name of the table or view
+#' @param con connection
+#'
+#' @returns A data.frame with `column_name` and `column_type`, in position order
+#' @export
+#' @md
+#' @examples
+#' \dontrun{
+#' ddb_columns("orders_view")
+#' }
+ddb_columns <- function(x, con = lrh_con()) {
+  DBI::dbGetQuery(con, stringr::str_glue("DESCRIBE {x}"))[c("column_name", "column_type")]
 }
 
 #' Check materialization date
