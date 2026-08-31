@@ -9,7 +9,8 @@ od_xl_sync(
   path,
   id_cols,
   od = NULL,
-  table = "Table1",
+  table = NULL,
+  sheet = NULL,
   remove = FALSE,
   unprotect = FALSE,
   wb_types = NULL,
@@ -26,7 +27,14 @@ od_xl_sync(
 
 \item{od}{OneDrive (if null, will use the stored OneDrive)}
 
-\item{table}{Name of the Excel Table. Default \code{"Table1"}.}
+\item{table}{Name of the Excel Table. \code{NULL} (default) resolves the table
+from \code{sheet} — see \code{sheet} for the rules.}
+
+\item{sheet}{Sheet name (or 1-based index) holding the table to sync, used
+when \code{table} is not given. The sheet must contain exactly one Excel Table;
+more than one is an error (name it with \code{table}). Defaults to \code{NULL},
+which uses the table named \code{"Table1"} if the workbook has one, and
+otherwise the single table on the first worksheet.}
 
 \item{remove}{If \code{TRUE}, also remove rows present in the table but missing
 from \code{x} (matched by \code{id_cols}). Default \code{FALSE} (additive sync — matches
@@ -48,7 +56,7 @@ contiguous changed cells into rectangular range writes; \code{FALSE} patches
 one cell per request.}
 }
 \value{
-The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove)}).
+The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove, table)}).
 }
 \description{
 Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code{\link[=od_xl_patch]{od_xl_patch()}} +

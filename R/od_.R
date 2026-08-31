@@ -610,6 +610,86 @@ check_xl_ext <- function(path, fn) {
   invisible(NULL)
 }
 
+#' Resolve which Excel Table to operate on
+#'
+#' Picks the table name for the `od_xl_*` functions from an explicit `table`,
+#' or by finding the single table on a worksheet. Resolution order:
+#' 1. `table`, if supplied (validated against the workbook).
+#' 2. The single table on `sheet`, if supplied. More than one table on that
+#'    sheet is an error — name the one you want with `table`.
+#' 3. Neither supplied: the table named `"Table1"` if the workbook has one
+#'    (the historical default of the `od_xl_*` functions), otherwise the single
+#'    table on the first worksheet.
+#'
+#' Deleted tables (`tab_act = 0`) are ignored.
+#'
+#' @param wb A `wbWorkbook` (from [od_read()] with `type = "wb"`)
+#' @param table Table name, or `NULL` to resolve from `sheet`
+#' @param sheet Sheet name or 1-based index, or `NULL` for the first sheet.
+#'   Ignored (beyond validation) when `table` is supplied.
+#'
+#' @returns The resolved table name, as a length-1 character vector
+#' @keywords internal
+resolve_xl_table <- function(wb, table = NULL, sheet = NULL) {
+
+  tabs <- wb$tables
+  # openxlsx2 keeps deleted tables in $tables with tab_act = 0
+  if ("tab_act" %in% names(tabs)) tabs <- tabs[tabs$tab_act == 1, , drop = FALSE]
+
+  if (is.null(tabs) || nrow(tabs) == 0) cli::cli_abort(c(
+    "x" = "No Excel Tables found in file."
+  ))
+
+  tab_sheets <- wb$sheet_names[tabs$tab_sheet]
+
+  if (!is.null(table)) {
+    if (!table %in% tabs$tab_name) cli::cli_abort(c(
+      "x" = "No table with the name {.val {table}} found in file.",
+      "i" = "Found tables {.val {tabs$tab_name}}"
+    ))
+    return(table)
+  }
+
+  # Neither given: keep the historical "Table1" default when it exists, so
+  # existing callers that never named a table behave exactly as before.
+  # Matched case-insensitively because Excel table names are.
+  if (is.null(sheet)) {
+    default <- tabs$tab_name[tolower(tabs$tab_name) == "table1"]
+    if (length(default) > 0) return(default[[1]])
+  }
+
+  # Resolve the sheet (default: the first one)
+  if (is.null(sheet)) {
+    sheet <- wb$sheet_names[[1]]
+  } else if (is.numeric(sheet)) {
+    if (sheet < 1 || sheet > length(wb$sheet_names)) cli::cli_abort(c(
+      "x" = "{.var sheet} index {.val {sheet}} is out of range.",
+      "i" = "File has {length(wb$sheet_names)} sheet{?s}: {.val {wb$sheet_names}}"
+    ))
+    sheet <- wb$sheet_names[[as.integer(sheet)]]
+  } else if (!sheet %in% wb$sheet_names) {
+    cli::cli_abort(c(
+      "x" = "No sheet named {.val {sheet}} found in file.",
+      "i" = "Found sheets {.val {wb$sheet_names}}"
+    ))
+  }
+
+  on_sheet <- tabs$tab_name[tab_sheets == sheet]
+
+  if (length(on_sheet) == 0) cli::cli_abort(c(
+    "x" = "No Excel Table found on sheet {.val {sheet}}.",
+    "i" = "Tables in file: {.val {stats::setNames(tabs$tab_name, NULL)}} (on sheet{?s} {.val {tab_sheets}})",
+    "i" = "Pass {.var table} to name one explicitly."
+  ))
+
+  if (length(on_sheet) > 1) cli::cli_abort(c(
+    "x" = "Sheet {.val {sheet}} has {length(on_sheet)} tables: {.val {on_sheet}}",
+    "i" = "Pass {.var table} to choose one."
+  ))
+
+  on_sheet
+}
+
 #' Unprotect sheets, run an expression, then re-protect
 #'
 #' Sheets are always re-protected on exit, even if the expression errors.
@@ -947,7 +1027,13 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'
 #' @param x Data frame of rows to append (columns must match the table)
 #' @param path The location in the Sharepoint drive
-#' @param table Name of the Excel Table. Defaults to "Table1"
+#' @param table Name of the Excel Table. `NULL` (default) resolves the table
+#'   from `sheet` — see `sheet` for the rules.
+#' @param sheet Sheet name (or 1-based index) holding the table to compare
+#'   against, used when `table` is not given. The sheet must contain exactly
+#'   one Excel Table; more than one is an error (name it with `table`).
+#'   Defaults to `NULL`, which uses the table named `"Table1"` if the workbook
+#'   has one, and otherwise the single table on the first worksheet.
 #' @param id_cols Column name (or vector of names) to use as an id.
 #' @param od OneDrive (if null, will use the stored OneDrive)
 #' @param wb_types Named integer vector passed to [openxlsx2::wb_to_df()] as
@@ -967,16 +1053,17 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 #'   if `x`'s POSIXct columns are not already in this tz, coerce them
 #'   yourself before calling. Set to `NULL` to skip coercion entirely.
 #'
-#' @returns a list of (append, patch, remove) for use with `od_xl_append()`,
-#'   `od_xl_patch()`, and `od_xl_remove()`. `remove` has all table columns plus
+#' @returns a list of (append, patch, remove, table) for use with
+#'   `od_xl_append()`, `od_xl_patch()`, and `od_xl_remove()`; `table` is the
+#'   resolved table name. `remove` has all table columns plus
 #'   an `index` column (0-based row index within the table's data rows).
 #'   Fully-blank rows are excluded from `remove`: the placeholder row Excel
 #'   keeps after every table row is deleted is not a real Graph table row
 #'   (deleting it errors) and the next append writes over it.
 #' @export
 #' @md
-od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_types = NULL,
-                          coerce_tz = "America/New_York") {
+od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NULL,
+                          wb_types = NULL, coerce_tz = "America/New_York") {
   if (is.null(od)) od <- od()
 
   # Error checking: path (fail fast before any expensive work)
@@ -1012,12 +1099,9 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
     for (nm in names(wb_types)) auto[[nm]] <- wb_types[[nm]]
   }
 
-  # Error checking: table
+  # Resolve which table to compare against (errors if ambiguous or missing)
   wb <- od_read(path, od = od, type = "wb")
-  if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
-    "x" = "No table with the name {.val {table}} found in file.",
-    "i" = "Found tables {.val {wb$tables$tab_name}}"
-  ))
+  table <- resolve_xl_table(wb, table = table, sheet = sheet)
 
   # Error checking: column names
   wb_df <- wb$to_df(named_region = table, types = auto)
@@ -1140,7 +1224,7 @@ od_xl_compare <- function(x, path, table = "Table1", id_cols, od = NULL, wb_type
   remove <- remove |>
     dplyr::filter(!dplyr::if_all(-dplyr::all_of("index"), is.na))
 
-  list(append = append, patch = patch, remove = remove)
+  list(append = append, patch = patch, remove = remove, table = table)
 }
 
 #' Remove rows from a named Excel Table
@@ -1412,7 +1496,13 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #' @param path The location in the Sharepoint drive
 #' @param id_cols Column name (or vector of names) to use as an id
 #' @param od OneDrive (if null, will use the stored OneDrive)
-#' @param table Name of the Excel Table. Default `"Table1"`.
+#' @param table Name of the Excel Table. `NULL` (default) resolves the table
+#'   from `sheet` — see `sheet` for the rules.
+#' @param sheet Sheet name (or 1-based index) holding the table to sync, used
+#'   when `table` is not given. The sheet must contain exactly one Excel Table;
+#'   more than one is an error (name it with `table`). Defaults to `NULL`,
+#'   which uses the table named `"Table1"` if the workbook has one, and
+#'   otherwise the single table on the first worksheet.
 #' @param remove If `TRUE`, also remove rows present in the table but missing
 #'   from `x` (matched by `id_cols`). Default `FALSE` (additive sync — matches
 #'   the common case where the workbook retains history).
@@ -1429,15 +1519,18 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #'   one cell per request.
 #'
 #' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
-#'   remove)`).
+#'   remove, table)`).
 #' @export
 #' @md
-od_xl_sync <- function(x, path, id_cols, od = NULL, table = "Table1",
+od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
                        remove = FALSE, unprotect = FALSE, wb_types = NULL,
                        coerce_tz = "America/New_York", use_blocks = TRUE) {
 
-  cmp <- od_xl_compare(x, path, table = table, id_cols = id_cols,
+  cmp <- od_xl_compare(x, path, table = table, sheet = sheet, id_cols = id_cols,
                        wb_types = wb_types, od = od, coerce_tz = coerce_tz)
+
+  # Use the name od_xl_compare() resolved, so append/remove hit the same table
+  table <- cmp$table
 
   od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect,
               use_blocks = use_blocks)

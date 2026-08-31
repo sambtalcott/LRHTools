@@ -7,7 +7,8 @@
 od_xl_compare(
   x,
   path,
-  table = "Table1",
+  table = NULL,
+  sheet = NULL,
   id_cols,
   od = NULL,
   wb_types = NULL,
@@ -19,7 +20,14 @@ od_xl_compare(
 
 \item{path}{The location in the Sharepoint drive}
 
-\item{table}{Name of the Excel Table. Defaults to "Table1"}
+\item{table}{Name of the Excel Table. \code{NULL} (default) resolves the table
+from \code{sheet} — see \code{sheet} for the rules.}
+
+\item{sheet}{Sheet name (or 1-based index) holding the table to compare
+against, used when \code{table} is not given. The sheet must contain exactly
+one Excel Table; more than one is an error (name it with \code{table}).
+Defaults to \code{NULL}, which uses the table named \code{"Table1"} if the workbook
+has one, and otherwise the single table on the first worksheet.}
 
 \item{id_cols}{Column name (or vector of names) to use as an id.}
 
@@ -46,8 +54,9 @@ if \code{x}'s POSIXct columns are not already in this tz, coerce them
 yourself before calling. Set to \code{NULL} to skip coercion entirely.}
 }
 \value{
-a list of (append, patch, remove) for use with \code{od_xl_append()},
-\code{od_xl_patch()}, and \code{od_xl_remove()}. \code{remove} has all table columns plus
+a list of (append, patch, remove, table) for use with
+\code{od_xl_append()}, \code{od_xl_patch()}, and \code{od_xl_remove()}; \code{table} is the
+resolved table name. \code{remove} has all table columns plus
 an \code{index} column (0-based row index within the table's data rows).
 Fully-blank rows are excluded from \code{remove}: the placeholder row Excel
 keeps after every table row is deleted is not a real Graph table row

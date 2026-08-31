@@ -109,6 +109,95 @@ test_that("graph_df_to_values formats dates and datetimes", {
   expect_equal(result[[1]][[2]], "2025-01-15 10:30:00")
 })
 
+# ── resolve_xl_table ─────────────────────────────────────────────────────────
+
+# Helper: workbook with one table per (sheet, name, dims) spec
+make_multi_wb <- function(specs) {
+  wb <- openxlsx2::wb_workbook()
+  for (sh in unique(vapply(specs, `[[`, "", "sheet"))) wb$add_worksheet(sh)
+  for (sp in specs) {
+    wb$add_data_table(sheet = sp$sheet, x = data.frame(id = 1:2),
+                      table_name = sp$name, dims = sp$dims %||% "A1")
+  }
+  wb
+}
+
+test_that("resolve_xl_table returns an explicit table", {
+  wb <- make_test_wb(data.frame(id = 1), table_name = "realtable")
+  expect_equal(resolve_xl_table(wb, table = "realtable"), "realtable")
+})
+
+test_that("resolve_xl_table errors on a table that isn't in the file", {
+  wb <- make_test_wb(data.frame(id = 1), table_name = "realtable")
+  expect_error(resolve_xl_table(wb, table = "faketable"), "No table with the name")
+})
+
+test_that("resolve_xl_table finds the single table on the first sheet", {
+  wb <- make_test_wb(data.frame(id = 1), table_name = "onlytable", sheet = "Log")
+  expect_equal(resolve_xl_table(wb), "onlytable")
+})
+
+test_that("resolve_xl_table finds the single table on a named sheet", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "Two", name = "second_tbl")
+  ))
+  expect_equal(resolve_xl_table(wb, sheet = "Two"), "second_tbl")
+})
+
+test_that("resolve_xl_table accepts a sheet index", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "Two", name = "second_tbl")
+  ))
+  expect_equal(resolve_xl_table(wb, sheet = 2), "second_tbl")
+})
+
+test_that("resolve_xl_table errors when a sheet has more than one table", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "One", name = "second_tbl", dims = "D1")
+  ))
+  expect_error(resolve_xl_table(wb, sheet = "One"), "has 2 tables")
+})
+
+test_that("resolve_xl_table errors when a sheet has no table", {
+  wb <- make_test_wb(data.frame(id = 1), table_name = "onlytable", sheet = "One")
+  wb$add_worksheet("Empty")
+  expect_error(resolve_xl_table(wb, sheet = "Empty"), "No Excel Table found on sheet")
+})
+
+test_that("resolve_xl_table errors on an unknown sheet name or out-of-range index", {
+  wb <- make_test_wb(data.frame(id = 1), table_name = "onlytable", sheet = "One")
+  expect_error(resolve_xl_table(wb, sheet = "Nope"), "No sheet named")
+  expect_error(resolve_xl_table(wb, sheet = 3), "out of range")
+})
+
+test_that("resolve_xl_table errors when the file has no tables", {
+  wb <- openxlsx2::wb_workbook()$add_worksheet("One")
+  expect_error(resolve_xl_table(wb), "No Excel Tables found")
+})
+
+test_that("resolve_xl_table keeps the legacy Table1 default over the first sheet", {
+  # Table1 lives on the second sheet, and the first sheet is ambiguous:
+  # without the legacy default this would error.
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "One", name = "second_tbl", dims = "D1"),
+    list(sheet = "Two", name = "Table1")
+  ))
+  expect_equal(tolower(resolve_xl_table(wb)), "table1")
+})
+
+test_that("resolve_xl_table ignores deleted tables", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "live_tbl"),
+    list(sheet = "One", name = "dead_tbl", dims = "D1")
+  ))
+  wb$tables$tab_act[wb$tables$tab_name == "dead_tbl"] <- 0
+  expect_equal(resolve_xl_table(wb, sheet = "One"), "live_tbl")
+})
+
 # ── od_xl_compare ────────────────────────────────────────────────────────────
 
 test_that("compare detects new rows as appends", {
@@ -407,6 +496,56 @@ test_that("compare errors on missing table", {
     od_xl_compare(data.frame(id = 1), "test.xlsx", "faketable", id_cols = "id", od = list()),
     "No table with the name"
   )
+})
+
+test_that("compare resolves the table from a sheet name", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "Two", name = "second_tbl")
+  ))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(data.frame(id = 1:3), "test.xlsx", sheet = "Two",
+                          id_cols = "id", od = list())
+
+  expect_equal(result$table, "second_tbl")
+  expect_equal(result$append$id, 3)
+})
+
+test_that("compare errors when the sheet holds more than one table", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "One", name = "second_tbl", dims = "D1")
+  ))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  expect_error(
+    od_xl_compare(data.frame(id = 1), "test.xlsx", sheet = "One",
+                  id_cols = "id", od = list()),
+    "has 2 tables"
+  )
+})
+
+test_that("compare defaults to the only table when none is named", {
+  wb <- make_test_wb(data.frame(id = 1:2), table_name = "onlytable", sheet = "Log")
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- od_xl_compare(data.frame(id = 1:2), "test.xlsx", id_cols = "id", od = list())
+
+  expect_equal(result$table, "onlytable")
+  expect_equal(nrow(result$append), 0)
 })
 
 # ── od_xl_patch ──────────────────────────────────────────────────────────────
