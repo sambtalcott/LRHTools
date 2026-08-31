@@ -621,7 +621,10 @@ check_xl_ext <- function(path, fn) {
 #'    (the historical default of the `od_xl_*` functions), otherwise the single
 #'    table on the first worksheet.
 #'
-#' Deleted tables (`tab_act = 0`) are ignored.
+#' Deleted tables (`tab_act = 0`) are ignored. The resolved name is checked for
+#' workbook-wide uniqueness: duplicate Excel Table names make the file
+#' unreadable to the Graph Excel API, so it is worth failing loudly here rather
+#' than on an opaque HTTP 501 later.
 #'
 #' @param wb A `wbWorkbook` (from [od_read()] with `type = "wb"`)
 #' @param table Table name, or `NULL` to resolve from `sheet`
@@ -642,12 +645,30 @@ resolve_xl_table <- function(wb, table = NULL, sheet = NULL) {
 
   tab_sheets <- wb$sheet_names[tabs$tab_sheet]
 
+  # Excel Table names must be unique within a workbook. Duplicates make the
+  # file unreadable to the Graph Excel API (every workbook/* call fails with
+  # HTTP 501, "something went wrong with this file"), and even if it opened,
+  # Graph addresses tables by name, so writes could land on the wrong sheet.
+  # openxlsx2's clone_worksheet() produces duplicates from the third clone on,
+  # so this is worth catching before any Graph call.
+  check_unique <- function(name) {
+    if (sum(tabs$tab_name == name) > 1) cli::cli_abort(c(
+      "x" = "Table {.val {name}} appears {sum(tabs$tab_name == name)} times in the file.",
+      "i" = "On sheet{?s} {.val {wb$sheet_names[tabs$tab_sheet[tabs$tab_name == name]]}}",
+      "i" = "Excel Table names must be unique within a workbook - a file with
+             duplicates cannot be opened by the Graph Excel API.",
+      "i" = "If the sheets were made with {.code clone_worksheet()}, rename each
+             copy's table before saving."
+    ))
+    name
+  }
+
   if (!is.null(table)) {
     if (!table %in% tabs$tab_name) cli::cli_abort(c(
       "x" = "No table with the name {.val {table}} found in file.",
       "i" = "Found tables {.val {tabs$tab_name}}"
     ))
-    return(table)
+    return(check_unique(table))
   }
 
   # Neither given: keep the historical "Table1" default when it exists, so
@@ -655,7 +676,7 @@ resolve_xl_table <- function(wb, table = NULL, sheet = NULL) {
   # Matched case-insensitively because Excel table names are.
   if (is.null(sheet)) {
     default <- tabs$tab_name[tolower(tabs$tab_name) == "table1"]
-    if (length(default) > 0) return(default[[1]])
+    if (length(default) > 0) return(check_unique(default[[1]]))
   }
 
   # Resolve the sheet (default: the first one)
@@ -687,7 +708,7 @@ resolve_xl_table <- function(wb, table = NULL, sheet = NULL) {
     "i" = "Pass {.var table} to choose one."
   ))
 
-  on_sheet
+  check_unique(on_sheet)
 }
 
 #' Unprotect sheets, run an expression, then re-protect
@@ -915,7 +936,8 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
 #' the file is open.
 #'
 #' @param path The location in the Sharepoint drive
-#' @param table Name of the Excel Table
+#' @param table Name of the Excel Table. `NULL` (default) resolves the table
+#'   from `sheet` — see `sheet` for the rules.
 #' @param columns Character vector of column names to sort by, in priority
 #'   order.
 #' @param desc Logical; if `TRUE`, sort descending. Length 1 (applied to all
@@ -925,12 +947,20 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   sorting and re-protects afterwards. Only works with passwordless
 #'   protection.
+#' @param sheet Sheet name (or 1-based index) holding the table to sort, used
+#'   when `table` is not given. The sheet must contain exactly one Excel Table;
+#'   more than one is an error (name it with `table`). Defaults to `NULL`,
+#'   which uses the table named `"Table1"` if the workbook has one, and
+#'   otherwise the single table on the first worksheet. It comes last in the
+#'   argument list so that existing positional calls keep working — pass it
+#'   by name.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
-od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
-                       od = NULL, unprotect = FALSE) {
+od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
+                       match_case = FALSE, od = NULL, unprotect = FALSE,
+                       sheet = NULL) {
 
   if (is.null(od)) od <- od()
 
@@ -942,12 +972,10 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
 
   item <- od$get_item(path)
 
-  # Error checking: table and resolve column indices
+  # Resolve which table to sort (errors if ambiguous or missing), then resolve
+  # column indices
   wb <- od_read(path, od = od, type = "wb")
-  if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
-    "x" = "No table with the name {.val {table}} found in file.",
-    "i" = "Found tables {.val {wb$tables$tab_name}}"
-  ))
+  table <- resolve_xl_table(wb, table = table, sheet = sheet)
   tab_cols <- colnames(wb$to_df(named_region = table))
   missing_cols <- setdiff(columns, tab_cols)
   if (length(missing_cols) > 0) {
@@ -975,12 +1003,13 @@ od_xl_sort <- function(path, table, columns, desc = FALSE, match_case = FALSE,
     ascending = !d
   ))
 
-  # Unprotect sheet if needed
+  # Unprotect sheet if needed. Named tab_sheet, not sheet: `sheet` is a
+  # parameter now, and the table may have been resolved from something else.
   if (unprotect) {
     tab_info <- wb$tables[wb$tables$tab_name == table, ]
-    sheet <- wb$sheet_names[tab_info$tab_sheet]
-    xl_unprotect(item, sheet)
-    on.exit(xl_protect(item, sheet), add = TRUE)
+    tab_sheet <- wb$sheet_names[tab_info$tab_sheet]
+    xl_unprotect(item, tab_sheet)
+    on.exit(xl_protect(item, tab_sheet), add = TRUE)
   }
 
   table_enc <- utils::URLencode(table, reserved = TRUE)

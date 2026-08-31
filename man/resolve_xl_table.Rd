@@ -28,6 +28,9 @@ or by finding the single table on a worksheet. Resolution order:
    table on the first worksheet.
 }
 \details{
-Deleted tables (`tab_act = 0`) are ignored.
+Deleted tables (`tab_act = 0`) are ignored. The resolved name is checked for
+workbook-wide uniqueness: duplicate Excel Table names make the file
+unreadable to the Graph Excel API, so it is worth failing loudly here rather
+than on an opaque HTTP 501 later.
 }
 \keyword{internal}

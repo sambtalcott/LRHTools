@@ -6,18 +6,20 @@
 \usage{
 od_xl_sort(
   path,
-  table,
+  table = NULL,
   columns,
   desc = FALSE,
   match_case = FALSE,
   od = NULL,
-  unprotect = FALSE
+  unprotect = FALSE,
+  sheet = NULL
 )
 }
 \arguments{
 \item{path}{The location in the Sharepoint drive}
 
-\item{table}{Name of the Excel Table}
+\item{table}{Name of the Excel Table. \code{NULL} (default) resolves the table
+from \code{sheet} — see \code{sheet} for the rules.}
 
 \item{columns}{Character vector of column names to sort by, in priority
 order.}
@@ -32,6 +34,14 @@ columns) or the same length as \code{columns}. Default \code{FALSE} (ascending).
 \item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
 sorting and re-protects afterwards. Only works with passwordless
 protection.}
+
+\item{sheet}{Sheet name (or 1-based index) holding the table to sort, used
+when \code{table} is not given. The sheet must contain exactly one Excel Table;
+more than one is an error (name it with \code{table}). Defaults to \code{NULL},
+which uses the table named \code{"Table1"} if the workbook has one, and
+otherwise the single table on the first worksheet. It comes last in the
+argument list so that existing positional calls keep working — pass it
+by name.}
 }
 \value{
 the ms_drive_item (invisibly)

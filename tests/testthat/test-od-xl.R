@@ -178,6 +178,19 @@ test_that("resolve_xl_table errors when the file has no tables", {
   expect_error(resolve_xl_table(wb), "No Excel Tables found")
 })
 
+test_that("resolve_xl_table errors on a duplicated table name", {
+  # openxlsx2's clone_worksheet() gives every clone past the second the same
+  # table name; Graph then rejects the whole file with HTTP 501.
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "dup_tbl"),
+    list(sheet = "Two", name = "other_tbl")
+  ))
+  wb$tables$tab_name[wb$tables$tab_name == "other_tbl"] <- "dup_tbl"
+
+  expect_error(resolve_xl_table(wb, sheet = "Two"), "appears 2 times")
+  expect_error(resolve_xl_table(wb, table = "dup_tbl"), "appears 2 times")
+})
+
 test_that("resolve_xl_table keeps the legacy Table1 default over the first sheet", {
   # Table1 lives on the second sheet, and the first sheet is ambiguous:
   # without the legacy default this would error.
@@ -546,6 +559,77 @@ test_that("compare defaults to the only table when none is named", {
 
   expect_equal(result$table, "onlytable")
   expect_equal(nrow(result$append), 0)
+})
+
+# ── od_xl_sort ───────────────────────────────────────────────────────────────
+
+test_that("sort resolves the table from a sheet name", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "Two", name = "second_tbl")
+  ))
+  calls <- list()
+  mock_item <- list(do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) })
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  od_xl_sort("test.xlsx", columns = "id", sheet = "Two", od = mock_od)
+
+  expect_length(calls, 1)
+  expect_match(calls[[1]][[1]], "tables('second_tbl')/sort/apply", fixed = TRUE)
+  expect_equal(calls[[1]]$body$fields, list(list(key = 0L, ascending = TRUE)))
+})
+
+test_that("sort defaults to the only table when none is named", {
+  wb <- make_test_wb(data.frame(id = 1:2), table_name = "onlytable", sheet = "Log")
+  calls <- list()
+  mock_item <- list(do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) })
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  od_xl_sort("test.xlsx", columns = "id", od = mock_od)
+
+  expect_match(calls[[1]][[1]], "tables('onlytable')/sort/apply", fixed = TRUE)
+})
+
+test_that("sort still takes table, columns and desc positionally", {
+  wb <- make_test_wb(data.frame(id = 1:2, val = c("a", "b")), table_name = "sorttable")
+  calls <- list()
+  mock_item <- list(do_operation = function(...) { calls[[length(calls) + 1]] <<- list(...) })
+  mock_od <- list(get_item = function(...) mock_item)
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  od_xl_sort("test.xlsx", "sorttable", "val", TRUE, od = mock_od)
+
+  expect_match(calls[[1]][[1]], "tables('sorttable')/sort/apply", fixed = TRUE)
+  expect_equal(calls[[1]]$body$fields, list(list(key = 1L, ascending = FALSE)))
+})
+
+test_that("sort errors when the sheet holds more than one table", {
+  wb <- make_multi_wb(list(
+    list(sheet = "One", name = "first_tbl"),
+    list(sheet = "One", name = "second_tbl", dims = "D1")
+  ))
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+  expect_error(
+    od_xl_sort("test.xlsx", columns = "id", sheet = "One", od = list(get_item = function(...) list())),
+    "has 2 tables"
+  )
 })
 
 # ── od_xl_patch ──────────────────────────────────────────────────────────────
