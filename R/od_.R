@@ -1513,9 +1513,13 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #' Sync a data frame to a named Excel Table on OneDrive
 #'
 #' Convenience wrapper around [od_xl_compare()] + [od_xl_patch()] +
-#' (optionally) [od_xl_remove()] + [od_xl_append()]. Works while the file is
+#' [od_xl_append()] + (optionally) [od_xl_remove()]. Works while the file is
 #' open in Excel, and on `.xlsm` as well as `.xlsx` — cells are edited in
 #' place, so a macro-enabled workbook keeps its macros.
+#'
+#' Rows are appended before any removal so that new rows inherit the Table's
+#' per-row formatting — removing first can empty the Table down to its blank
+#' placeholder row and lose that formatting.
 #'
 #' Type coercion of `x` (factors → character, difftime/hms/Duration →
 #' numeric), `wb_types` auto-inference, and `coerce_tz` handling are all
@@ -1564,13 +1568,22 @@ od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
   od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect,
               use_blocks = use_blocks)
 
+  # Append before remove. Deleting every data row first collapses the Table to
+  # its blank placeholder row, taking the per-row formatting stored on those
+  # rows with it, so the appended rows come back unformatted. Appending first
+  # lands the new rows next to still-formatted ones, which they inherit from.
+  # Safe on indices: rows are added at the bottom (no `index` in the body), so
+  # nothing existing is renumbered and `cmp$remove$index` stays valid. Safe on
+  # a partial failure too: `append` ids are absent from the table and `remove`
+  # ids are absent from `x`, so the interim state can't violate the id_cols
+  # uniqueness check the next compare runs.
+  od_xl_append(cmp$append, path, table = table, od = od,
+               unprotect = unprotect)
+
   if (remove) {
     od_xl_remove(cmp$remove, path, table = table, od = od,
                  unprotect = unprotect)
   }
-
-  od_xl_append(cmp$append, path, table = table, od = od,
-               unprotect = unprotect)
 
   invisible(cmp)
 }

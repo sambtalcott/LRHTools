@@ -60,11 +60,15 @@ The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(a
 }
 \description{
 Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code{\link[=od_xl_patch]{od_xl_patch()}} +
-(optionally) \code{\link[=od_xl_remove]{od_xl_remove()}} + \code{\link[=od_xl_append]{od_xl_append()}}. Works while the file is
+\code{\link[=od_xl_append]{od_xl_append()}} + (optionally) \code{\link[=od_xl_remove]{od_xl_remove()}}. Works while the file is
 open in Excel, and on \code{.xlsm} as well as \code{.xlsx} — cells are edited in
 place, so a macro-enabled workbook keeps its macros.
 }
 \details{
+Rows are appended before any removal so that new rows inherit the Table's
+per-row formatting — removing first can empty the Table down to its blank
+placeholder row and lose that formatting.
+
 Type coercion of \code{x} (factors → character, difftime/hms/Duration →
 numeric), \code{wb_types} auto-inference, and \code{coerce_tz} handling are all
 done by \code{\link[=od_xl_compare]{od_xl_compare()}} — see its docs for details.
