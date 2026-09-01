@@ -881,3 +881,50 @@ test_that("append returns early on empty input", {
 
   expect_identical(result, mock_item)
 })
+
+# ── od_exists error classification ───────────────────────────────────────────
+
+# Minimal stand-in for an ms_drive: od_exists() only ever calls $get_item().
+fake_od <- function(err = NULL) {
+  list(get_item = function(...) {
+    if (!is.null(err)) stop(simpleError(err))
+    "item"
+  })
+}
+
+test_that("od_exists returns TRUE when the item is found", {
+  expect_true(od_exists("f.xlsx", od = fake_od()))
+})
+
+test_that("od_exists returns FALSE on a genuine 404", {
+  expect_false(od_exists("f.xlsx", od = fake_od("Not Found (HTTP 404).")))
+})
+
+test_that("od_exists re-throws a persistent 503 instead of reporting absent", {
+  expect_error(
+    od_exists("f.xlsx", od = fake_od("Service Unavailable (HTTP 503).")),
+    "503"
+  )
+})
+
+test_that("od_exists re-throws an auth failure instead of reporting absent", {
+  expect_error(
+    od_exists("f.xlsx", od = fake_od("Unauthorized (HTTP 401).")),
+    "401"
+  )
+})
+
+test_that("od_exists still returns FALSE for a statusless local error", {
+  expect_false(od_exists("f.xlsx", od = fake_od("malformed path")))
+})
+
+test_that("od_exists retries a transient 503 and succeeds", {
+  n <- 0
+  od <- list(get_item = function(...) {
+    n <<- n + 1
+    if (n < 3) stop(simpleError("Service Unavailable (HTTP 503)."))
+    "item"
+  })
+  expect_true(od_exists("f.xlsx", od = od))
+  expect_equal(n, 3)
+})

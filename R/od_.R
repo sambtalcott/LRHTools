@@ -334,7 +334,7 @@ od_get_link <- function(path = "", desktop = TRUE, type = "existing", od = NULL)
 
   if (is.null(od)) od <- od()
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
 
   link <- if (type == "share") {
     item$create_share_link()
@@ -506,8 +506,8 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
 
   if (type == "rds") {
     switch(od_type(od),
-      ms_drive = od$load_rds(path = path),
-      ms_folder = od$get_item(path)$load_rds(),
+      ms_drive = graph_retry(\() od$load_rds(path = path)),
+      ms_folder = graph_retry(\() od$get_item(path)$load_rds()),
       cli::cli_abort(c(
         "x" = "Current OneDrive object not recognized",
         "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
@@ -515,8 +515,8 @@ od_read <- function(path, od = NULL, type = NULL, ...) {
     )
   } else if (type == "dataframe") {
     switch(od_type(od),
-      ms_drive = od$load_dataframe(path = path, ...),
-      ms_folder = od$get_item(path)$load_dataframe(...),
+      ms_drive = graph_retry(\() od$load_dataframe(path = path, ...)),
+      ms_folder = graph_retry(\() od$get_item(path)$load_dataframe(...)),
       cli::cli_abort(c(
         "x" = "Current OneDrive object not recognized",
         "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
@@ -879,7 +879,7 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
   ))
   check_xl_ext(path, "od_xl_append()")
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
 
   # Error checking: table
   wb <- od_read(path, od = od, type = "wb")
@@ -970,7 +970,7 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
   ))
   check_xl_ext(path, "od_xl_sort()")
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
 
   # Resolve which table to sort (errors if ambiguous or missing), then resolve
   # column indices
@@ -1294,10 +1294,10 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
   ))
   if (nrow(x) == 0) {
     cli::cli_alert_info("No rows to remove")
-    return(invisible(od$get_item(path)))
+    return(invisible(graph_retry(\() od$get_item(path))))
   }
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
 
   # Unprotect sheet if needed
   if (unprotect) {
@@ -1472,7 +1472,7 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
   # the cell (JSON null would be interpreted as "no change").
   x$new <- tidyr::replace_na(as.character(x$new), "")
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
 
   # Unprotect affected sheets if needed
   if (unprotect) {
@@ -1712,8 +1712,8 @@ od_upload <- function(src, dest = basename(src), od = NULL) {
   od_check_folder(od, folder_path = dirname(dest))
 
   switch(od_type(od),
-    ms_drive = od$upload_file(src = src, dest = dest),
-    ms_folder = od$upload(src = src, dest = dest),
+    ms_drive = graph_retry(\() od$upload_file(src = src, dest = dest)),
+    ms_folder = graph_retry(\() od$upload(src = src, dest = dest)),
     cli::cli_abort(c(
       "x" = "Current OneDrive object not recognized",
       "i" = "Should be an object of class {.val ms_drive} or {.val ms_drive_item}"
@@ -1765,7 +1765,7 @@ od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE)
     ))
   }
 
-  od$get_item(src)$download(dest = dest, overwrite = overwrite)
+  graph_retry(\() od$get_item(src)$download(dest = dest, overwrite = overwrite))
 
   invisible(dest)
 }
@@ -1783,9 +1783,15 @@ od_exists <- function(path, od = NULL) {
   if (is.null(od)) od <- od()
 
   tryCatch({
-    od$get_item(path)
+    graph_retry(\() od$get_item(path), quiet = TRUE)
     TRUE
   }, error = \(e) {
+    # Only a genuine 404 means the item is absent. A transient 5xx that
+    # outlived its retries (or an auth failure) must surface: silently
+    # returning FALSE turns a Graph blip into a misleading "does not exist"
+    # abort in the caller, or -- worse -- a wrong branch in od_write().
+    status <- graph_http_status(e)
+    if (!is.na(status) && status != 404L) stop(e)
     FALSE
   })
 }
@@ -1799,15 +1805,15 @@ od_locked <- function(path, od = NULL) {
   # If it doesn't exist, return false
   if (!od_exists(path, od)) return (FALSE)
 
-  item <- od$get_item(path)
+  item <- graph_retry(\() od$get_item(path))
   cur_name <- item$properties$name
   test_name <- paste0(".test.", cur_name)
 
   tryCatch({
     name_changed <- FALSE
-    item$update(name = test_name)
+    graph_retry(\() item$update(name = test_name), quiet = TRUE)
     name_changed <- TRUE
-    item$update(name = cur_name)
+    graph_retry(\() item$update(name = cur_name), quiet = TRUE)
     FALSE
   }, error = \(e) {
     if (name_changed) {
@@ -1858,10 +1864,15 @@ od_check_folder <- function(od, folder_path) {
   if (folder_path %in% c("", ".", NA)) return()
 
   tryCatch(
-    od$get_item(folder_path),
+    graph_retry(\() od$get_item(folder_path), quiet = TRUE),
 
     # If it doesn't exist, ask if it should be created
     error = \(cnd) {
+      # A transient Graph failure is not a missing folder. Re-throw rather
+      # than dropping into select.list(), which would block forever on an
+      # unattended run (the daily script has no interactive stdin).
+      status <- graph_http_status(cnd)
+      if (!is.na(status) && status != 404L) stop(cnd)
       cli::cli_inform(c(
         "i" = "Destination folder {.val {folder_path}} does not exist.",
         "Would you like to create this folder?"
@@ -1889,7 +1900,9 @@ od_create_folder <- function(folder_path, od = NULL) {
 
   if (is.null(od)) od <- od()
 
-  od$create_folder(folder_path)
+  # Non-idempotent: a folder that was actually created before the response
+  # was lost would 409 on a blind retry, so only retry never-landed statuses.
+  graph_retry(\() od$create_folder(folder_path), idempotent = FALSE)
 
   invisible(folder_path)
 }
