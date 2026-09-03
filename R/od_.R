@@ -1266,6 +1266,12 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
 #' Rows are deleted highest-index-first so that earlier deletions don't shift
 #' the indices of pending ones.
 #'
+#' Any AutoFilter applied to the table is cleared first. Excel refuses to
+#' delete rows from a table while a filter hides some of them — the delete
+#' would shift a non-contiguous set of cells — and fails the request with
+#' HTTP 409 *"This won't work because it would move cells in a table on your
+#' worksheet"*. The filter criteria are not restored afterwards.
+#'
 #' @param x Data frame with an `index` column (0-based). Extra columns are
 #'   ignored (so output of `od_xl_compare()$remove` works directly).
 #' @param path The location in the Sharepoint drive
@@ -1308,9 +1314,20 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
     on.exit(xl_protect(item, sheet), add = TRUE)
   }
 
+  table_enc <- utils::URLencode(table, reserved = TRUE)
+
+  # Clear any AutoFilter first: Excel won't delete table rows while a filter
+  # hides some of them (409, "would move cells in a table on your worksheet"),
+  # and a filter someone left on the sheet is otherwise an unfixable failure
+  # here. Cheap and idempotent, so it runs unconditionally rather than paying
+  # a request per column to find out whether one is applied.
+  graph_retry(\() item$do_operation(
+    stringr::str_glue("workbook/tables('{table_enc}')/clearFilters"),
+    http_verb = "POST"
+  ))
+
   # Delete highest-index-first to avoid index shifting
   indices <- sort(unique(x$index), decreasing = TRUE)
-  table_enc <- utils::URLencode(table, reserved = TRUE)
 
   purrr::walk(indices, \(i) {
     graph_retry(\() item$do_operation(

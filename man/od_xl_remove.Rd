@@ -32,4 +32,10 @@ the table's data rows).
 \details{
 Rows are deleted highest-index-first so that earlier deletions don't shift
 the indices of pending ones.
+
+Any AutoFilter applied to the table is cleared first. Excel refuses to
+delete rows from a table while a filter hides some of them — the delete
+would shift a non-contiguous set of cells — and fails the request with
+HTTP 409 \emph{"This won't work because it would move cells in a table on your
+worksheet"}. The filter criteria are not restored afterwards.
 }
