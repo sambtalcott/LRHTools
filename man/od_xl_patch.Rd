@@ -7,7 +7,8 @@
 od_xl_patch(x, path, od = NULL, unprotect = FALSE, use_blocks = TRUE)
 }
 \arguments{
-\item{x}{Data frame with columns \code{sheet}, \code{range}, and \code{new}}
+\item{x}{Data frame with columns \code{sheet}, \code{range}, and \code{new}. A lazy
+table (dbplyr and friends) is \code{collect()}ed first.}
 
 \item{path}{The location in the Sharepoint drive}
 

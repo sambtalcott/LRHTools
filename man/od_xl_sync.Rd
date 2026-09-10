@@ -19,7 +19,8 @@ od_xl_sync(
 )
 }
 \arguments{
-\item{x}{Data frame to sync to the table}
+\item{x}{Data frame to sync to the table. A lazy table (dbplyr and
+friends) is \code{collect()}ed by \code{\link[=od_xl_compare]{od_xl_compare()}} first.}
 
 \item{path}{The location in the Sharepoint drive}
 

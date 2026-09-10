@@ -610,6 +610,41 @@ check_xl_ext <- function(path, fn) {
   invisible(NULL)
 }
 
+#' Bring `x` into memory as a local data frame
+#'
+#' The `od_xl_*` functions compare, index and count rows locally, so a lazy
+#' table (`tbl_lazy`: dbplyr, dtplyr) has to be realized first. Passing one
+#' through untouched fails in confusing ways rather than loudly: `nrow()`
+#' returns `NA`
+#' (so the "nothing to do" guards error with a missing-value condition),
+#' `purrr::imap()` walks the query object's internals instead of its columns,
+#' and a join against a local frame errors on mismatched sources. Database
+#' joins also default to `na_matches = "never"`, which would treat every
+#' `NULL` id as unmatched.
+#'
+#' A data frame is returned unchanged, a lazy table (`tbl_lazy`, which covers
+#' dbplyr and dtplyr) is [dplyr::collect()]ed, and anything else aborts.
+#'
+#' @param x Object supplied by the caller
+#' @param fn Name of the calling function, for the error message
+#' @param arg Name of the argument being checked, for messages
+#'
+#' @returns `x` as a local data frame
+#' @keywords internal
+as_local_df <- function(x, fn, arg = "x") {
+  if (is.data.frame(x)) return(x)
+
+  if (inherits(x, "tbl_lazy")) {
+    cli::cli_alert_info("Collecting lazy {.var {arg}} ({.cls {class(x)[1]}})")
+    return(dplyr::collect(x))
+  }
+
+  cli::cli_abort(c(
+    "x" = "{.var {arg}} must be a data frame or a lazy table in {.var {fn}}",
+    "i" = "Got {.cls {class(x)}}"
+  ))
+}
+
 #' Resolve which Excel Table to operate on
 #'
 #' Picks the table name for the `od_xl_*` functions from an explicit `table`,
@@ -850,7 +885,8 @@ graph_retry <- function(.f, idempotent = TRUE, max_tries = 5L,
 #' By default new rows appear at the bottom. Set `append_top = TRUE` to insert
 #' them at the top instead. Works while the file is open.
 #'
-#' @param x Data frame of rows to append (columns must match the table)
+#' @param x Data frame of rows to append (columns must match the table).
+#'   A lazy table (dbplyr and friends) is `collect()`ed first.
 #' @param path The location in the Sharepoint drive
 #' @param table Name of the Excel Table
 #' @param od OneDrive (if null, will use the stored OneDrive)
@@ -878,6 +914,8 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
   check_xl_ext(path, "od_xl_append()")
+
+  x <- as_local_df(x, "od_xl_append()")
 
   item <- graph_retry(\() od$get_item(path))
 
@@ -1038,6 +1076,10 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 #' 3. [od_xl_append()] — adding rows doesn't affect existing data-row positions.
 #' 4. [od_xl_sort()] — optional, last, once the row set is final.
 #'
+#' A lazy `x` (dbplyr and friends) is `collect()`ed up front: the compare
+#' joins, counts and indexes rows locally, and database joins would also
+#' default to `na_matches = "never"`.
+#'
 #' Auto-coerces types in `x` that won't survive the compare:
 #' * factor columns become character
 #' * `difftime`/`hms`/`Duration` columns become numeric (seconds)
@@ -1054,7 +1096,8 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 #' correct a single odd column (e.g. force a real numeric/date) without
 #' re-listing the rest.
 #'
-#' @param x Data frame of rows to append (columns must match the table)
+#' @param x Data frame of rows to append (columns must match the table).
+#'   A lazy table (dbplyr and friends) is `collect()`ed first.
 #' @param path The location in the Sharepoint drive
 #' @param table Name of the Excel Table. `NULL` (default) resolves the table
 #'   from `sheet` — see `sheet` for the rules.
@@ -1100,6 +1143,9 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
   check_xl_ext(path, "od_xl_compare()")
+
+  # Realize lazy tables before any local comparison
+  x <- as_local_df(x, "od_xl_compare()")
 
   # Coerce types that won't survive the compare's anti_join
   x <- dplyr::mutate(x,
@@ -1273,7 +1319,8 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
 #' worksheet"*. The filter criteria are not restored afterwards.
 #'
 #' @param x Data frame with an `index` column (0-based). Extra columns are
-#'   ignored (so output of `od_xl_compare()$remove` works directly).
+#'   ignored (so output of `od_xl_compare()$remove` works directly). A lazy
+#'   table (dbplyr and friends) is `collect()`ed first.
 #' @param path The location in the Sharepoint drive
 #' @param table Name of the Excel Table
 #' @param od OneDrive (if null, will use the stored OneDrive)
@@ -1293,6 +1340,8 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
   check_xl_ext(path, "od_xl_remove()")
+
+  x <- as_local_df(x, "od_xl_remove()")
 
   # Error checking: x
   if (!"index" %in% colnames(x)) cli::cli_abort(c(
@@ -1446,7 +1495,8 @@ xl_patch_blocks <- function(x, max_rows = 500L) {
 #' every cell it spans, so only complete rectangles are batched and scattered
 #' cells still go one at a time. Blocks are capped at 500 rows.
 #'
-#' @param x Data frame with columns `sheet`, `range`, and `new`
+#' @param x Data frame with columns `sheet`, `range`, and `new`. A lazy
+#'   table (dbplyr and friends) is `collect()`ed first.
 #' @param path The location in the Sharepoint drive
 #' @param od OneDrive (if null, will use the stored OneDrive)
 #' @param unprotect If `TRUE`, temporarily unprotects affected worksheets before
@@ -1472,6 +1522,8 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
     "x" = "File {.val {path}} does not exist in the current OneDrive"
   ))
   check_xl_ext(path, "od_xl_patch()")
+
+  x <- as_local_df(x, "od_xl_patch()")
 
   # Error checking: x
   required <- c("sheet", "range", "new")
@@ -1542,7 +1594,8 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #' numeric), `wb_types` auto-inference, and `coerce_tz` handling are all
 #' done by [od_xl_compare()] — see its docs for details.
 #'
-#' @param x Data frame to sync to the table
+#' @param x Data frame to sync to the table. A lazy table (dbplyr and
+#'   friends) is `collect()`ed by [od_xl_compare()] first.
 #' @param path The location in the Sharepoint drive
 #' @param id_cols Column name (or vector of names) to use as an id
 #' @param od OneDrive (if null, will use the stored OneDrive)

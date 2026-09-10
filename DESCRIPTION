@@ -1,7 +1,7 @@
 Package: LRHTools
 Type: Package
 Title: What the Package Does (Title Case)
-Version: 0.2.12
+Version: 0.2.13
 Authors@R: c(
     person(
       "Sam", "Talcott",
@@ -52,6 +52,8 @@ Imports:
     stringdist,
     tidyr
 Suggests:
+    dbplyr,
+    withr,
     pagedown,
     quarto,
     testthat (>= 3.0.0)

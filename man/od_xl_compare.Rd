@@ -16,7 +16,8 @@ od_xl_compare(
 )
 }
 \arguments{
-\item{x}{Data frame of rows to append (columns must match the table)}
+\item{x}{Data frame of rows to append (columns must match the table).
+A lazy table (dbplyr and friends) is \code{collect()}ed first.}
 
 \item{path}{The location in the Sharepoint drive}
 
@@ -76,6 +77,10 @@ so it must run before any operation that moves rows.
 \item \code{\link[=od_xl_append]{od_xl_append()}} — adding rows doesn't affect existing data-row positions.
 \item \code{\link[=od_xl_sort]{od_xl_sort()}} — optional, last, once the row set is final.
 }
+
+A lazy \code{x} (dbplyr and friends) is \code{collect()}ed up front: the compare
+joins, counts and indexes rows locally, and database joins would also
+default to \code{na_matches = "never"}.
 
 Auto-coerces types in \code{x} that won't survive the compare:
 \itemize{

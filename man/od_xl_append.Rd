@@ -15,7 +15,8 @@ od_xl_append(
 )
 }
 \arguments{
-\item{x}{Data frame of rows to append (columns must match the table)}
+\item{x}{Data frame of rows to append (columns must match the table).
+A lazy table (dbplyr and friends) is \code{collect()}ed first.}
 
 \item{path}{The location in the Sharepoint drive}
 

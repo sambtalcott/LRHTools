@@ -8,7 +8,8 @@ od_xl_remove(x, path, table, od = NULL, unprotect = FALSE)
 }
 \arguments{
 \item{x}{Data frame with an \code{index} column (0-based). Extra columns are
-ignored (so output of \code{od_xl_compare()$remove} works directly).}
+ignored (so output of \code{od_xl_compare()$remove} works directly). A lazy
+table (dbplyr and friends) is \code{collect()}ed first.}
 
 \item{path}{The location in the Sharepoint drive}
 

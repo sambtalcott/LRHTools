@@ -928,3 +928,77 @@ test_that("od_exists retries a transient 503 and succeeds", {
   expect_true(od_exists("f.xlsx", od = od))
   expect_equal(n, 3)
 })
+
+# ── as_local_df / lazy tables ────────────────────────────────────────────────
+
+# Lazy tbl over an in-memory DuckDB, torn down with the test
+local_lazy_tbl <- function(df, env = parent.frame()) {
+  skip_if_not_installed("dbplyr")
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE), envir = env)
+  DBI::dbWriteTable(con, "t", df)
+  dplyr::tbl(con, "t")
+}
+
+test_that("as_local_df passes a data frame through unchanged", {
+  df <- data.frame(id = 1:2, val = c("a", "b"))
+  expect_identical(as_local_df(df, "fn()"), df)
+})
+
+test_that("as_local_df aborts on something with no collect method", {
+  expect_error(as_local_df(list(1, 2), "od_xl_sync()"), "must be a data frame")
+})
+
+test_that("as_local_df collects a lazy table", {
+  df <- data.frame(id = 1:3, val = c("a", "b", "c"))
+  lazy <- local_lazy_tbl(df)
+
+  expect_false(is.data.frame(lazy))
+  out <- suppressMessages(as_local_df(lazy, "od_xl_compare()"))
+  expect_true(is.data.frame(out))
+  expect_equal(nrow(out), 3)
+  expect_equal(out$val, c("a", "b", "c"))
+})
+
+test_that("compare handles a lazy x the same as a local one", {
+  wb_df <- data.frame(id = 1:2, val = c("a", "b"))
+  wb <- make_test_wb(wb_df)
+
+  lazy <- local_lazy_tbl(data.frame(id = 1:3, val = c("a", "CHANGED", "c")))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- suppressMessages(
+    od_xl_compare(lazy, "test.xlsx", "testtable", id_cols = "id", od = list())
+  )
+
+  expect_equal(nrow(result$append), 1)
+  expect_equal(result$append$id, 3)
+  expect_equal(nrow(result$patch), 1)
+  expect_equal(result$patch$new, "CHANGED")
+})
+
+test_that("compare on a lazy x matches NA ids instead of dropping them", {
+  # Database joins default to na_matches = "never"; collecting first keeps the
+  # local "na" behaviour, so a NULL id doesn't look like a brand new row.
+  wb_df <- data.frame(id = c(1, NA), val = c("a", "b"))
+  wb <- make_test_wb(wb_df)
+
+  lazy <- local_lazy_tbl(data.frame(id = c(1, NA), val = c("a", "b")))
+
+  local_mocked_bindings(
+    od_exists = function(...) TRUE,
+    od_read = function(...) wb
+  )
+
+  result <- suppressMessages(
+    od_xl_compare(lazy, "test.xlsx", "testtable", id_cols = "id", od = list())
+  )
+
+  expect_equal(nrow(result$append), 0)
+  expect_equal(nrow(result$patch), 0)
+  expect_equal(nrow(result$remove), 0)
+})
