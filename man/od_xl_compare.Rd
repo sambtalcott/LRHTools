@@ -55,9 +55,11 @@ if \code{x}'s POSIXct columns are not already in this tz, coerce them
 yourself before calling. Set to \code{NULL} to skip coercion entirely.}
 }
 \value{
-a list of (append, patch, remove, table) for use with
+a list of (append, patch, remove, table, new_cols) for use with
 \code{od_xl_append()}, \code{od_xl_patch()}, and \code{od_xl_remove()}; \code{table} is the
-resolved table name. \code{remove} has all table columns plus
+resolved table name and \code{new_cols} names the table columns absent from
+\code{x} (filled with \code{NA} in \code{append}, and what \code{\link[=od_xl_sync]{od_xl_sync()}} forwards as
+\code{od_xl_append(null_cols =)}). \code{remove} has all table columns plus
 an \code{index} column (0-based row index within the table's data rows).
 Fully-blank rows are excluded from \code{remove}: the placeholder row Excel
 keeps after every table row is deleted is not a real Graph table row

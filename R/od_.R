@@ -783,14 +783,24 @@ xl_protect <- function(item, sheets, options = list(allowAutoFilter = TRUE)) {
 
 #' Convert an R data frame to the nested list format the Graph API expects
 #'
+#' `NA` normally becomes `""`, which Graph writes as an explicit empty value.
+#' Columns named in `null_cols` keep their `NA`s, which serialize to JSON
+#' `null` — Graph leaves those cells alone, so a Table's calculated-column
+#' formulas and default cell contents survive a row add. See [od_xl_append()].
+#'
 #' @param df data frame to convert
+#' @param null_cols Character vector of columns whose `NA`s should be sent as
+#'   JSON `null` rather than `""`.
 #'
 #' @returns a nested list
-graph_df_to_values <- function(df) {
+graph_df_to_values <- function(df, null_cols = character(0)) {
+  keep_na <- intersect(null_cols, names(df))
   df |>
     dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.POSIXct), format)) |>
     dplyr::mutate(dplyr::across(dplyr::where(lubridate::is.Date), format)) |>
-    dplyr::mutate(dplyr::across(dplyr::everything(), \(x) tidyr::replace_na(as.character(x), ""))) |>
+    dplyr::mutate(dplyr::across(dplyr::everything(), as.character)) |>
+    dplyr::mutate(dplyr::across(!dplyr::any_of(keep_na),
+                                \(x) tidyr::replace_na(x, ""))) |>
     purrr::pmap(list) |>
     purrr::map(unname)
 }
@@ -900,12 +910,19 @@ graph_retry <- function(.f, idempotent = TRUE, max_tries = 5L,
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   appending and re-protects afterwards. Only works with passwordless
 #'   protection.
+#' @param null_cols Character vector of columns to send as JSON `null` where
+#'   `x` has `NA`, instead of the usual `""`. Graph leaves a `null` cell
+#'   untouched, so the Table fills it from its own calculated-column formula
+#'   (and keeps cell content like an unchecked checkbox); an explicit `""`
+#'   overwrites the formula with a constant. [od_xl_sync()] passes the columns
+#'   the Table has but `x` does not. Default `character(0)`.
 #'
 #' @export
 #' @md
 #' @returns the ms_drive_item (invisibly)
 od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
-                         append_top = FALSE, unprotect = FALSE) {
+                         append_top = FALSE, unprotect = FALSE,
+                         null_cols = character(0)) {
 
   if (is.null(od)) od <- od()
 
@@ -943,7 +960,7 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
 
   # Append away!
   table_enc <- utils::URLencode(table, reserved = TRUE)
-  values <- graph_df_to_values(x)
+  values <- graph_df_to_values(x, null_cols = null_cols)
 
   # Unprotect sheet if needed
   if (unprotect) {
@@ -1125,9 +1142,11 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 #'   if `x`'s POSIXct columns are not already in this tz, coerce them
 #'   yourself before calling. Set to `NULL` to skip coercion entirely.
 #'
-#' @returns a list of (append, patch, remove, table) for use with
+#' @returns a list of (append, patch, remove, table, new_cols) for use with
 #'   `od_xl_append()`, `od_xl_patch()`, and `od_xl_remove()`; `table` is the
-#'   resolved table name. `remove` has all table columns plus
+#'   resolved table name and `new_cols` names the table columns absent from
+#'   `x` (filled with `NA` in `append`, and what [od_xl_sync()] forwards as
+#'   `od_xl_append(null_cols =)`). `remove` has all table columns plus
 #'   an `index` column (0-based row index within the table's data rows).
 #'   Fully-blank rows are excluded from `remove`: the placeholder row Excel
 #'   keeps after every table row is deleted is not a real Graph table row
@@ -1299,7 +1318,8 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
   remove <- remove |>
     dplyr::filter(!dplyr::if_all(-dplyr::all_of("index"), is.na))
 
-  list(append = append, patch = patch, remove = remove, table = table)
+  list(append = append, patch = patch, remove = remove, table = table,
+       new_cols = new_cols)
 }
 
 #' Remove rows from a named Excel Table
@@ -1622,7 +1642,7 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #'   one cell per request.
 #'
 #' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
-#'   remove, table)`).
+#'   remove, table, new_cols)`).
 #' @export
 #' @md
 od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
@@ -1647,8 +1667,12 @@ od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
   # a partial failure too: `append` ids are absent from the table and `remove`
   # ids are absent from `x`, so the interim state can't violate the id_cols
   # uniqueness check the next compare runs.
+  # Columns the Table has but `x` does not are filled with NA by
+  # od_xl_compare(). Send those as JSON null so Graph leaves them to the Table:
+  # an explicit "" overwrites a calculated column's formula with a constant and
+  # blanks cells that carry their own content, such as checkboxes.
   od_xl_append(cmp$append, path, table = table, od = od,
-               unprotect = unprotect)
+               unprotect = unprotect, null_cols = cmp$new_cols)
 
   if (remove) {
     od_xl_remove(cmp$remove, path, table = table, od = od,

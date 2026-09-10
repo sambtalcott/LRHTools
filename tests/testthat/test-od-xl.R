@@ -98,6 +98,20 @@ test_that("graph_df_to_values converts NAs to empty strings", {
   expect_equal(result[[2]], list("", "y"))
 })
 
+test_that("graph_df_to_values keeps NA in null_cols so Graph gets JSON null", {
+  df <- data.frame(a = c(1, NA), b = c(NA, "y"))
+  result <- graph_df_to_values(df, null_cols = "b")
+
+  # `a` still blanks out, `b` stays NA -> serialized as null
+  expect_equal(result[[1]], list("1", NA_character_))
+  expect_equal(result[[2]], list("", "y"))
+})
+
+test_that("graph_df_to_values ignores null_cols that aren't in the frame", {
+  df <- data.frame(a = c(1, NA))
+  expect_equal(graph_df_to_values(df, null_cols = "nope"), list(list("1"), list("")))
+})
+
 test_that("graph_df_to_values formats dates and datetimes", {
   df <- data.frame(
     d = as.Date("2025-01-15"),
@@ -382,6 +396,10 @@ test_that("compare fills missing columns with NA for appends", {
   expect_equal(nrow(result$append), 1)
   expect_equal(colnames(result$append), c("id", "val", "extra"))
   expect_true(is.na(result$append$extra))
+
+  # forwarded to od_xl_append(null_cols =) so the append doesn't overwrite
+  # whatever the table itself puts in that column (calculated formula, checkbox)
+  expect_equal(result$new_cols, "extra")
 })
 
 test_that("compare detects missing rows as removes with 0-based indices", {

@@ -11,7 +11,8 @@ od_xl_append(
   od = NULL,
   check_columns = TRUE,
   append_top = FALSE,
-  unprotect = FALSE
+  unprotect = FALSE,
+  null_cols = character(0)
 )
 }
 \arguments{
@@ -36,6 +37,13 @@ cleaner. Default \code{FALSE}.}
 \item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
 appending and re-protects afterwards. Only works with passwordless
 protection.}
+
+\item{null_cols}{Character vector of columns to send as JSON \code{null} where
+\code{x} has \code{NA}, instead of the usual \code{""}. Graph leaves a \code{null} cell
+untouched, so the Table fills it from its own calculated-column formula
+(and keeps cell content like an unchecked checkbox); an explicit \code{""}
+overwrites the formula with a constant. \code{\link[=od_xl_sync]{od_xl_sync()}} passes the columns
+the Table has but \code{x} does not. Default \code{character(0)}.}
 }
 \value{
 the ms_drive_item (invisibly)

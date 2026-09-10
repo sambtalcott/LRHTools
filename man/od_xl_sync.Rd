@@ -57,7 +57,7 @@ contiguous changed cells into rectangular range writes; \code{FALSE} patches
 one cell per request.}
 }
 \value{
-The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove, table)}).
+The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove, table, new_cols)}).
 }
 \description{
 Convenience wrapper around \code{\link[=od_xl_compare]{od_xl_compare()}} + \code{\link[=od_xl_patch]{od_xl_patch()}} +

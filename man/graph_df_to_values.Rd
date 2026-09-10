@@ -4,14 +4,20 @@
 \alias{graph_df_to_values}
 \title{Convert an R data frame to the nested list format the Graph API expects}
 \usage{
-graph_df_to_values(df)
+graph_df_to_values(df, null_cols = character(0))
 }
 \arguments{
 \item{df}{data frame to convert}
+
+\item{null_cols}{Character vector of columns whose `NA`s should be sent as
+JSON `null` rather than `""`.}
 }
 \value{
 a nested list
 }
 \description{
-Convert an R data frame to the nested list format the Graph API expects
+`NA` normally becomes `""`, which Graph writes as an explicit empty value.
+Columns named in `null_cols` keep their `NA`s, which serialize to JSON
+`null` — Graph leaves those cells alone, so a Table's calculated-column
+formulas and default cell contents survive a row add. See [od_xl_append()].
 }
