@@ -12,7 +12,8 @@ od_xl_compare(
   id_cols,
   od = NULL,
   wb_types = NULL,
-  coerce_tz = "America/New_York"
+  coerce_tz = "America/New_York",
+  wb = NULL
 )
 }
 \arguments{
@@ -53,6 +54,9 @@ Defaults to \code{"America/New_York"} to match the typical tz tagging of
 data pulled from DuckDB. Only the workbook (\code{wb_df}) side is coerced;
 if \code{x}'s POSIXct columns are not already in this tz, coerce them
 yourself before calling. Set to \code{NULL} to skip coercion entirely.}
+
+\item{wb}{An openxlsx2 workbook file (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) to use
+for checking instead of reading the file again.}
 }
 \value{
 a list of (append, patch, remove, table, new_cols) for use with

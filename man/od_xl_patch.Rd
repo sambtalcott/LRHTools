@@ -4,7 +4,15 @@
 \alias{od_xl_patch}
 \title{Patch cells through the coauthoring API}
 \usage{
-od_xl_patch(x, path, od = NULL, unprotect = FALSE, use_blocks = TRUE)
+od_xl_patch(
+  x,
+  path,
+  od = NULL,
+  unprotect = FALSE,
+  use_blocks = TRUE,
+  session = NULL,
+  wb = NULL
+)
 }
 \arguments{
 \item{x}{Data frame with columns \code{sheet}, \code{range}, and \code{new}. A lazy
@@ -24,6 +32,12 @@ address (\code{"C4"}) and no cell to appear twice; both error out. Set to
 \code{FALSE} to write one cell per request — needed for hand-built input using
 multi-cell ranges, and useful for isolating which cell a failing patch is
 choking on.}
+
+\item{session}{A graph session (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) used to batch
+operations and reduce time.}
+
+\item{wb}{An openxlsx2 workbook file (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) to use
+for checking instead of reading the file again.}
 }
 \value{
 the ms_drive_item (invisibly)

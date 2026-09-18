@@ -4,7 +4,15 @@
 \alias{od_xl_remove}
 \title{Remove rows from a named Excel Table}
 \usage{
-od_xl_remove(x, path, table, od = NULL, unprotect = FALSE)
+od_xl_remove(
+  x,
+  path,
+  table,
+  od = NULL,
+  unprotect = FALSE,
+  session = NULL,
+  wb = NULL
+)
 }
 \arguments{
 \item{x}{Data frame with an \code{index} column (0-based). Extra columns are
@@ -20,6 +28,12 @@ table (dbplyr and friends) is \code{collect()}ed first.}
 \item{unprotect}{If \code{TRUE}, temporarily unprotects the worksheet before
 removing and re-protects afterwards. Only works with passwordless
 protection.}
+
+\item{session}{A graph session (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) used to batch
+operations and reduce time.}
+
+\item{wb}{An openxlsx2 workbook file (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) to use
+for checking instead of reading the file again.}
 }
 \value{
 the ms_drive_item (invisibly)

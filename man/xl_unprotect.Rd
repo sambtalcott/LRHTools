@@ -2,26 +2,59 @@
 % Please edit documentation in R/od_.R
 \name{xl_unprotect}
 \alias{xl_unprotect}
+\alias{xl_get_protection}
+\alias{xl_reprotect}
 \alias{xl_protect}
-\title{Unprotect sheets, run an expression, then re-protect}
+\title{Unprotect sheets, run an expression, then restore protection}
 \usage{
-xl_unprotect(item, sheets)
+xl_unprotect(item, sheets, session = NULL)
 
-xl_protect(item, sheets, options = list(allowAutoFilter = TRUE))
+xl_get_protection(item, sheets, session = NULL)
+
+xl_reprotect(item, state, session = NULL)
+
+xl_protect(
+  item,
+  sheets,
+  options = list(allowAutoFilter = TRUE),
+  session = NULL
+)
 }
 \arguments{
 \item{item}{An ms_drive_item for the workbook}
 
 \item{sheets}{Character vector of sheet names to unprotect}
 
+\item{session}{A graph session (provided by [od_xl_sync()]) used to batch
+operations and reduce time.}
+
+\item{state}{Protection state captured by [xl_unprotect()].}
+
 \item{options}{Named list of protection options specifying what users are
 allowed to do on the protected sheet (e.g. `list(allowAutoFilter = TRUE)`).
 See \url{https://learn.microsoft.com/en-us/graph/api/worksheetprotection-protect#request-body}
-for available options.}
+for available options. The default is a floor, not a description of any
+particular sheet — to preserve a sheet's own settings across an edit, use
+[xl_unprotect()] + [xl_reprotect()] rather than calling this directly.}
 }
 \value{
-NULL (called for side effects)
+`xl_unprotect()` returns the captured protection state invisibly: a
+  list named by sheet, each element `list(protected =, options =)`. Pass it
+  to [xl_reprotect()].
+
+`xl_get_protection()` returns that same state (without changing
+  anything).
+
+`xl_reprotect()` returns NULL (called for side effects).
 }
 \description{
-Sheets are always re-protected on exit, even if the expression errors.
+Protection is always restored on exit, even if the expression errors.
+}
+\details{
+`xl_unprotect()` reads each sheet's protection state *before* lifting it and
+returns it, so that [xl_reprotect()] can put back exactly what was there:
+the same `allow*` options, and nothing at all on a sheet that was never
+protected. Restoring from a hard-coded option list instead silently rewrites
+the workbook's protection on every call — a sheet that allowed sorting comes
+back with sorting disallowed, and an unprotected sheet comes back protected.
 }

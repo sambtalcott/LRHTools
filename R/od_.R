@@ -746,38 +746,83 @@ resolve_xl_table <- function(wb, table = NULL, sheet = NULL) {
   check_unique(on_sheet)
 }
 
-#' Unprotect sheets, run an expression, then re-protect
+#' Unprotect sheets, run an expression, then restore protection
 #'
-#' Sheets are always re-protected on exit, even if the expression errors.
+#' Protection is always restored on exit, even if the expression errors.
+#'
+#' `xl_unprotect()` reads each sheet's protection state *before* lifting it and
+#' returns it, so that [xl_reprotect()] can put back exactly what was there:
+#' the same `allow*` options, and nothing at all on a sheet that was never
+#' protected. Restoring from a hard-coded option list instead silently rewrites
+#' the workbook's protection on every call — a sheet that allowed sorting comes
+#' back with sorting disallowed, and an unprotected sheet comes back protected.
 #'
 #' @param item An ms_drive_item for the workbook
 #' @param sheets Character vector of sheet names to unprotect
+#' @param session A graph session (provided by [od_xl_sync()]) used to batch
+#'   operations and reduce time.
 #'
-#' @returns NULL (called for side effects)
-xl_unprotect <- function(item, sheets) {
-  sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
-  for (s in sheets_enc) {
-    graph_retry(\() item$do_operation(
-      stringr::str_glue("workbook/worksheets('{s}')/protection/unprotect"),
-      http_verb = "POST"
-    ))
+#' @returns `xl_unprotect()` returns the captured protection state invisibly: a
+#'   list named by sheet, each element `list(protected =, options =)`. Pass it
+#'   to [xl_reprotect()].
+xl_unprotect <- function(item, sheets, session = NULL) {
+  state <- xl_get_protection(item, sheets, session = session)
+  for (s in sheets) {
+    if (!state[[s]]$protected) next
+    s_enc <- utils::URLencode(s, reserved = TRUE)
+    xl_op(item,
+      stringr::str_glue("workbook/worksheets('{s_enc}')/protection/unprotect"),
+      http_verb = "POST", session = session
+    )
   }
+  invisible(state)
+}
+
+#' @rdname xl_unprotect
+#' @returns `xl_get_protection()` returns that same state (without changing
+#'   anything).
+xl_get_protection <- function(item, sheets, session = NULL) {
+  state <- lapply(sheets, function(s) {
+    s_enc <- utils::URLencode(s, reserved = TRUE)
+    p <- xl_op(item,
+      stringr::str_glue("workbook/worksheets('{s_enc}')/protection"),
+      http_verb = "GET", session = session
+    )
+    list(protected = isTRUE(p$protected), options = p$options)
+  })
+  stats::setNames(state, sheets)
+}
+
+#' @rdname xl_unprotect
+#' @param state Protection state captured by [xl_unprotect()].
+#' @returns `xl_reprotect()` returns NULL (called for side effects).
+xl_reprotect <- function(item, state, session = NULL) {
+  for (s in names(state)) {
+    # A sheet that wasn't protected to begin with must be left alone —
+    # protecting it here would be an edit the caller never asked for.
+    if (!state[[s]]$protected) next
+    xl_protect(item, s, options = state[[s]]$options, session = session)
+  }
+  invisible(NULL)
 }
 
 #' @rdname xl_unprotect
 #' @param options Named list of protection options specifying what users are
 #'   allowed to do on the protected sheet (e.g. `list(allowAutoFilter = TRUE)`).
 #'   See \url{https://learn.microsoft.com/en-us/graph/api/worksheetprotection-protect#request-body}
-#'   for available options.
-xl_protect <- function(item, sheets, options = list(allowAutoFilter = TRUE)) {
+#'   for available options. The default is a floor, not a description of any
+#'   particular sheet — to preserve a sheet's own settings across an edit, use
+#'   [xl_unprotect()] + [xl_reprotect()] rather than calling this directly.
+xl_protect <- function(item, sheets, options = list(allowAutoFilter = TRUE),
+                       session = NULL) {
   sheets_enc <- utils::URLencode(sheets, reserved = TRUE)
   for (s in sheets_enc) {
-    graph_retry(\() item$do_operation(
+    xl_op(item,
       stringr::str_glue("workbook/worksheets('{s}')/protection/protect"),
       http_verb = "POST",
       body = list(options = options),
-      encode = "json"
-    ))
+      encode = "json", session = session
+    )
   }
 }
 
@@ -889,6 +934,92 @@ graph_retry <- function(.f, idempotent = TRUE, max_tries = 5L,
   }
 }
 
+#' Excel workbook sessions
+#'
+#' @description
+#' Without a session, every `/workbook/*` request loads the workbook, applies
+#' the change and saves it again — so a hundred single-row edits pay that cost a
+#' hundred times. A session keeps the workbook loaded server-side between
+#' requests. Measured on identical table-row deletes: 1.13s each without a
+#' session, 0.12s each within one.
+#'
+#' Sessions are **not** exclusive. Several can be open on the same workbook at
+#' once, session-less calls keep working alongside them, and one can be opened
+#' on a workbook somebody has open in desktop Excel — which is the whole point
+#' of the `od_xl_*` family. A session that is closed properly leaves no lock
+#' behind; one that is abandoned holds a delete/rename lock (not an edit lock)
+#' until it expires, so always close in `on.exit()`.
+#'
+#' Two constraints worth knowing:
+#'
+#' * Writes made inside a session are buffered and are **not visible outside
+#'   it** until it closes. Nothing may re-read the file (e.g. [od_read()],
+#'   which downloads via `/content` and bypasses the session entirely) between
+#'   opening and closing, or it reads pre-session bytes.
+#' * Sheet protection still applies inside a session. A write to a protected
+#'   sheet is a 403 either way, so [xl_unprotect()] is still required.
+#'
+#' @param item An ms_drive_item for the workbook
+#' @param session A session handle from `xl_session_open()`, or `NULL` to make
+#'   the call without one.
+#'
+#' @returns `xl_session_open()` returns an environment holding the session id.
+#'   It is an environment rather than a list so that a session re-created after
+#'   expiry is seen by every caller still holding the handle.
+#' @keywords internal
+xl_session_open <- function(item) {
+  res <- graph_retry(\() item$do_operation(
+    "workbook/createSession",
+    http_verb = "POST",
+    body = list(persistChanges = TRUE),
+    encode = "json"
+  ), idempotent = FALSE)
+  rlang::env(id = res$id)
+}
+
+#' @rdname xl_session_open
+#' @returns `xl_session_close()` returns NULL. It never throws: a session that
+#'   has already expired or been closed is not an error worth failing a sync
+#'   over, and it will time out server-side regardless.
+xl_session_close <- function(item, session) {
+  if (is.null(session)) return(invisible(NULL))
+  try(
+    item$do_operation("workbook/closeSession", http_verb = "POST",
+                      httr::add_headers(`workbook-session-id` = session$id)),
+    silent = TRUE
+  )
+  invisible(NULL)
+}
+
+# Graph reports an expired/unknown session id as one of these. A session dies on
+# idle, so a long-running sync can outlive one; re-opening and replaying the
+# call is safe because the lost session had no un-flushed state we still need.
+.graph_dead_session <- "InvalidSession|InvalidSessionReCreatable|SessionExpired|invalid session"
+
+#' @rdname xl_session_open
+#' @param op Operation path passed to `item$do_operation()`
+#' @param ... Further arguments for `item$do_operation()`
+#' @param idempotent Passed through to [graph_retry()]
+#' @returns `xl_op()` returns whatever the operation returns.
+xl_op <- function(item, op, ..., session = NULL, idempotent = TRUE) {
+  call_once <- function() {
+    args <- list(op, ...)
+    if (!is.null(session)) {
+      args <- c(args, list(httr::add_headers(`workbook-session-id` = session$id)))
+    }
+    graph_retry(\() do.call(item$do_operation, args), idempotent = idempotent)
+  }
+
+  if (is.null(session)) return(call_once())
+
+  tryCatch(call_once(), error = function(e) {
+    if (!grepl(.graph_dead_session, conditionMessage(e), ignore.case = TRUE)) stop(e)
+    cli::cli_alert_warning("Workbook session expired; reopening")
+    session$id <- xl_session_open(item)$id
+    call_once()
+  })
+}
+
 #' Append rows to a named Excel Table
 #'
 #' The worksheet must contain a named Table (Insert > Table in Excel).
@@ -916,13 +1047,17 @@ graph_retry <- function(.f, idempotent = TRUE, max_tries = 5L,
 #'   (and keeps cell content like an unchecked checkbox); an explicit `""`
 #'   overwrites the formula with a constant. [od_xl_sync()] passes the columns
 #'   the Table has but `x` does not. Default `character(0)`.
+#' @param session A graph session (provided by [od_xl_sync()]) used to batch
+#'   operations and reduce time.
+#' @param wb An openxlsx2 workbook file (provided by [od_xl_sync()]) to use
+#'   for checking instead of reading the file again.
 #'
 #' @export
 #' @md
 #' @returns the ms_drive_item (invisibly)
 od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
                          append_top = FALSE, unprotect = FALSE,
-                         null_cols = character(0)) {
+                         null_cols = character(0), session = NULL, wb = NULL) {
 
   if (is.null(od)) od <- od()
 
@@ -937,7 +1072,7 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
   item <- graph_retry(\() od$get_item(path))
 
   # Error checking: table
-  wb <- od_read(path, od = od, type = "wb")
+  if (is.null(wb)) wb <- od_read(path, od = od, type = "wb")
   if (!table %in% wb$tables$tab_name) cli::cli_abort(c(
     "x" = "No table with the name {.val {table}} found in file.",
     "i" = "Found tables {.val {wb$tables$tab_name}}"
@@ -966,19 +1101,18 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
   if (unprotect) {
     tab_info <- wb$tables[wb$tables$tab_name == table, ]
     sheet <- wb$sheet_names[tab_info$tab_sheet]
-    xl_unprotect(item, sheet)
-    on.exit(xl_protect(item, sheet), add = TRUE)
+    prot <- xl_unprotect(item, sheet, session = session)
+    on.exit(xl_reprotect(item, prot, session = session), add = TRUE)
   }
 
   body <- list(values = values)
   if (append_top) body$index <- 0
 
-  graph_retry(\() item$do_operation(
+  xl_op(item,
     stringr::str_glue("workbook/tables('{table_enc}')/rows/add"),
     http_verb = "POST",
     body = body,
-    encode = "json"
-  ), idempotent = FALSE)
+    encode = "json", session = session, idempotent = FALSE)
 
   cli::cli_alert_success("Appended {nrow(x)} rows to table {.val {table}}")
   invisible(item)
@@ -1009,13 +1143,17 @@ od_xl_append <- function(x, path, table, od = NULL, check_columns = TRUE,
 #'   otherwise the single table on the first worksheet. It comes last in the
 #'   argument list so that existing positional calls keep working — pass it
 #'   by name.
+#' @param session A graph session (provided by [od_xl_sync()]) used to batch
+#'   operations and reduce time.
+#' @param wb An openxlsx2 workbook file (provided by [od_xl_sync()]) to use
+#'   for checking instead of reading the file again.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
 od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
                        match_case = FALSE, od = NULL, unprotect = FALSE,
-                       sheet = NULL) {
+                       sheet = NULL, session = NULL, wb = NULL) {
 
   if (is.null(od)) od <- od()
 
@@ -1029,7 +1167,7 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 
   # Resolve which table to sort (errors if ambiguous or missing), then resolve
   # column indices
-  wb <- od_read(path, od = od, type = "wb")
+  if (is.null(wb)) wb <- od_read(path, od = od, type = "wb")
   table <- resolve_xl_table(wb, table = table, sheet = sheet)
   tab_cols <- colnames(wb$to_df(named_region = table))
   missing_cols <- setdiff(columns, tab_cols)
@@ -1063,17 +1201,16 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
   if (unprotect) {
     tab_info <- wb$tables[wb$tables$tab_name == table, ]
     tab_sheet <- wb$sheet_names[tab_info$tab_sheet]
-    xl_unprotect(item, tab_sheet)
-    on.exit(xl_protect(item, tab_sheet), add = TRUE)
+    prot <- xl_unprotect(item, tab_sheet, session = session)
+    on.exit(xl_reprotect(item, prot, session = session), add = TRUE)
   }
 
   table_enc <- utils::URLencode(table, reserved = TRUE)
-  graph_retry(\() item$do_operation(
+  xl_op(item,
     stringr::str_glue("workbook/tables('{table_enc}')/sort/apply"),
     http_verb = "POST",
     body = list(fields = fields, matchCase = match_case),
-    encode = "json"
-  ))
+    encode = "json", session = session)
 
   cli::cli_alert_success("Sorted table {.val {table}} by {.val {columns}}")
   invisible(item)
@@ -1141,6 +1278,8 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 #'   data pulled from DuckDB. Only the workbook (`wb_df`) side is coerced;
 #'   if `x`'s POSIXct columns are not already in this tz, coerce them
 #'   yourself before calling. Set to `NULL` to skip coercion entirely.
+#' @param wb An openxlsx2 workbook file (provided by [od_xl_sync()]) to use
+#'   for checking instead of reading the file again.
 #'
 #' @returns a list of (append, patch, remove, table, new_cols) for use with
 #'   `od_xl_append()`, `od_xl_patch()`, and `od_xl_remove()`; `table` is the
@@ -1154,7 +1293,8 @@ od_xl_sort <- function(path, table = NULL, columns, desc = FALSE,
 #' @export
 #' @md
 od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NULL,
-                          wb_types = NULL, coerce_tz = "America/New_York") {
+                          wb_types = NULL, coerce_tz = "America/New_York",
+                          wb = NULL) {
   if (is.null(od)) od <- od()
 
   # Error checking: path (fail fast before any expensive work)
@@ -1194,7 +1334,7 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
   }
 
   # Resolve which table to compare against (errors if ambiguous or missing)
-  wb <- od_read(path, od = od, type = "wb")
+  if (is.null(wb)) wb <- od_read(path, od = od, type = "wb")
   table <- resolve_xl_table(wb, table = table, sheet = sheet)
 
   # Error checking: column names
@@ -1347,11 +1487,16 @@ od_xl_compare <- function(x, path, table = NULL, sheet = NULL, id_cols, od = NUL
 #' @param unprotect If `TRUE`, temporarily unprotects the worksheet before
 #'   removing and re-protects afterwards. Only works with passwordless
 #'   protection.
+#' @param session A graph session (provided by [od_xl_sync()]) used to batch
+#'   operations and reduce time.
+#' @param wb An openxlsx2 workbook file (provided by [od_xl_sync()]) to use
+#'   for checking instead of reading the file again.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
-od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
+od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE,
+                         session = NULL, wb = NULL) {
 
   if (is.null(od)) od <- od()
 
@@ -1376,11 +1521,11 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
 
   # Unprotect sheet if needed
   if (unprotect) {
-    wb <- od_read(path, od = od, type = "wb")
+    if (is.null(wb)) wb <- od_read(path, od = od, type = "wb")
     tab_info <- wb$tables[wb$tables$tab_name == table, ]
     sheet <- wb$sheet_names[tab_info$tab_sheet]
-    xl_unprotect(item, sheet)
-    on.exit(xl_protect(item, sheet), add = TRUE)
+    prot <- xl_unprotect(item, sheet, session = session)
+    on.exit(xl_reprotect(item, prot, session = session), add = TRUE)
   }
 
   table_enc <- utils::URLencode(table, reserved = TRUE)
@@ -1390,19 +1535,17 @@ od_xl_remove <- function(x, path, table, od = NULL, unprotect = FALSE) {
   # and a filter someone left on the sheet is otherwise an unfixable failure
   # here. Cheap and idempotent, so it runs unconditionally rather than paying
   # a request per column to find out whether one is applied.
-  graph_retry(\() item$do_operation(
+  xl_op(item,
     stringr::str_glue("workbook/tables('{table_enc}')/clearFilters"),
-    http_verb = "POST"
-  ))
+    http_verb = "POST", session = session)
 
   # Delete highest-index-first to avoid index shifting
   indices <- sort(unique(x$index), decreasing = TRUE)
 
   purrr::walk(indices, \(i) {
-    graph_retry(\() item$do_operation(
+    xl_op(item,
       stringr::str_glue("workbook/tables('{table_enc}')/rows/itemAt(index={i})"),
-      http_verb = "DELETE"
-    ), idempotent = FALSE)
+      http_verb = "DELETE", session = session, idempotent = FALSE)
   }, .progress = "Removing rows")
 
   cli::cli_alert_success("Removed {length(indices)} row{?s} from table {.val {table}}")
@@ -1528,12 +1671,16 @@ xl_patch_blocks <- function(x, max_rows = 500L) {
 #'   `FALSE` to write one cell per request — needed for hand-built input using
 #'   multi-cell ranges, and useful for isolating which cell a failing patch is
 #'   choking on.
+#' @param session A graph session (provided by [od_xl_sync()]) used to batch
+#'   operations and reduce time.
+#' @param wb An openxlsx2 workbook file (provided by [od_xl_sync()]) to use
+#'   for checking instead of reading the file again.
 #'
 #' @returns the ms_drive_item (invisibly)
 #' @export
 #' @md
 od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
-                        use_blocks = TRUE) {
+                        use_blocks = TRUE, session = NULL, wb = NULL) {
 
   if (is.null(od)) od <- od()
 
@@ -1566,8 +1713,8 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
   # Unprotect affected sheets if needed
   if (unprotect) {
     sheets <- unique(x$sheet)
-    xl_unprotect(item, sheets)
-    on.exit(xl_protect(item, sheets), add = TRUE)
+    prot <- xl_unprotect(item, sheets, session = session)
+    on.exit(xl_reprotect(item, prot, session = session), add = TRUE)
   }
 
   req <- if (use_blocks) {
@@ -1583,14 +1730,13 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 
   purrr::pwalk(req[c("sheet_enc", "address", "values")],
                \(sheet_enc, address, values) {
-    graph_retry(\() item$do_operation(
+    xl_op(item,
       stringr::str_glue(
         "workbook/worksheets('{sheet_enc}')/range(address='{address}')"
       ),
       http_verb = "PATCH",
       body = list(values = values),
-      encode = "json"
-    ))
+      encode = "json", session = session)
   }, .progress = "Patching values")
 
   cli::cli_alert_success(
@@ -1640,6 +1786,22 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #' @param use_blocks Forwarded to [od_xl_patch()]. `TRUE` (default) batches
 #'   contiguous changed cells into rectangular range writes; `FALSE` patches
 #'   one cell per request.
+#' @param sort_columns Character vector of column names to sort the Table by
+#'   afterwards, in priority order. `NULL` (default) does not sort. Sorting
+#'   here rather than with a separate [od_xl_sort()] call keeps it inside this
+#'   function's workbook session and reuses the already-loaded workbook, which
+#'   is worth a download and a workbook load/save. The sort runs only when
+#'   something actually changed — patching `Max_Overdue`-style columns can
+#'   reorder rows, so a patch counts as a change, not just an append.
+#' @param sort_desc Logical, recycled over `sort_columns`. Default `FALSE`.
+#' @param sort_match_case Should the sort be case-sensitive? Default `FALSE`.
+#'
+#' @section Performance:
+#' All four phases run inside a single [xl_session_open()] workbook session and
+#' share one [od_read()] of the workbook, rather than each paying its own
+#' download plus a server-side load/save per request. On a table needing ten
+#' row deletions that is the difference between ~1.1s and ~0.12s per deletion,
+#' plus three workbook downloads saved.
 #'
 #' @returns The [od_xl_compare()] result invisibly (`list(append, patch,
 #'   remove, table, new_cols)`).
@@ -1647,16 +1809,41 @@ od_xl_patch <- function(x, path, od = NULL, unprotect = FALSE,
 #' @md
 od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
                        remove = FALSE, unprotect = FALSE, wb_types = NULL,
-                       coerce_tz = "America/New_York", use_blocks = TRUE) {
+                       coerce_tz = "America/New_York", use_blocks = TRUE,
+                       sort_columns = NULL, sort_desc = FALSE,
+                       sort_match_case = FALSE) {
+
+  if (is.null(od)) od <- od()
+
+  # Read the workbook once and hand it to every phase. This is not only a
+  # saving: once the session below is open its writes are buffered and are not
+  # visible to od_read(), which downloads via /content and bypasses the
+  # session, so a re-read mid-sync would return pre-session bytes.
+  wb <- od_read(path, od = od, type = "wb")
+
+  item <- graph_retry(\() od$get_item(path))
+  session <- xl_session_open(item)
+  on.exit(xl_session_close(item, session), add = TRUE)
 
   cmp <- od_xl_compare(x, path, table = table, sheet = sheet, id_cols = id_cols,
-                       wb_types = wb_types, od = od, coerce_tz = coerce_tz)
+                       wb_types = wb_types, od = od, coerce_tz = coerce_tz,
+                       wb = wb)
 
   # Use the name od_xl_compare() resolved, so append/remove hit the same table
   table <- cmp$table
 
-  od_xl_patch(cmp$patch, path, od = od, unprotect = unprotect,
-              use_blocks = use_blocks)
+  # Own the protection here rather than letting each phase unprotect and
+  # re-protect around itself: four round trips become one pair, and the sheet
+  # is never briefly re-protected between phases.
+  if (unprotect) {
+    tab_info <- wb$tables[wb$tables$tab_name == table, ]
+    tab_sheet <- wb$sheet_names[tab_info$tab_sheet]
+    prot <- xl_unprotect(item, tab_sheet, session = session)
+    on.exit(xl_reprotect(item, prot, session = session), add = TRUE, after = FALSE)
+  }
+
+  od_xl_patch(cmp$patch, path, od = od, unprotect = FALSE,
+              use_blocks = use_blocks, session = session, wb = wb)
 
   # Append before remove. Deleting every data row first collapses the Table to
   # its blank placeholder row, taking the per-row formatting stored on those
@@ -1672,11 +1859,22 @@ od_xl_sync <- function(x, path, id_cols, od = NULL, table = NULL, sheet = NULL,
   # an explicit "" overwrites a calculated column's formula with a constant and
   # blanks cells that carry their own content, such as checkboxes.
   od_xl_append(cmp$append, path, table = table, od = od,
-               unprotect = unprotect, null_cols = cmp$new_cols)
+               unprotect = FALSE, null_cols = cmp$new_cols,
+               session = session, wb = wb)
 
   if (remove) {
     od_xl_remove(cmp$remove, path, table = table, od = od,
-                 unprotect = unprotect)
+                 unprotect = FALSE, session = session, wb = wb)
+  }
+
+  # A patch can move a row's sort key just as an append can, so any change at
+  # all is grounds for re-sorting; an unchanged table is left alone.
+  changed <- nrow(cmp$patch) > 0 || nrow(cmp$append) > 0 ||
+    (remove && nrow(cmp$remove) > 0)
+  if (!is.null(sort_columns) && changed) {
+    od_xl_sort(path, table = table, columns = sort_columns, desc = sort_desc,
+               match_case = sort_match_case, od = od, unprotect = FALSE,
+               session = session, wb = wb)
   }
 
   invisible(cmp)

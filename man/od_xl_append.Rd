@@ -12,7 +12,9 @@ od_xl_append(
   check_columns = TRUE,
   append_top = FALSE,
   unprotect = FALSE,
-  null_cols = character(0)
+  null_cols = character(0),
+  session = NULL,
+  wb = NULL
 )
 }
 \arguments{
@@ -44,6 +46,12 @@ untouched, so the Table fills it from its own calculated-column formula
 (and keeps cell content like an unchecked checkbox); an explicit \code{""}
 overwrites the formula with a constant. \code{\link[=od_xl_sync]{od_xl_sync()}} passes the columns
 the Table has but \code{x} does not. Default \code{character(0)}.}
+
+\item{session}{A graph session (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) used to batch
+operations and reduce time.}
+
+\item{wb}{An openxlsx2 workbook file (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) to use
+for checking instead of reading the file again.}
 }
 \value{
 the ms_drive_item (invisibly)

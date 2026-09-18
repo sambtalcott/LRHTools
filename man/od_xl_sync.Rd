@@ -15,7 +15,10 @@ od_xl_sync(
   unprotect = FALSE,
   wb_types = NULL,
   coerce_tz = "America/New_York",
-  use_blocks = TRUE
+  use_blocks = TRUE,
+  sort_columns = NULL,
+  sort_desc = FALSE,
+  sort_match_case = FALSE
 )
 }
 \arguments{
@@ -55,6 +58,18 @@ skip.}
 \item{use_blocks}{Forwarded to \code{\link[=od_xl_patch]{od_xl_patch()}}. \code{TRUE} (default) batches
 contiguous changed cells into rectangular range writes; \code{FALSE} patches
 one cell per request.}
+
+\item{sort_columns}{Character vector of column names to sort the Table by
+afterwards, in priority order. \code{NULL} (default) does not sort. Sorting
+here rather than with a separate \code{\link[=od_xl_sort]{od_xl_sort()}} call keeps it inside this
+function's workbook session and reuses the already-loaded workbook, which
+is worth a download and a workbook load/save. The sort runs only when
+something actually changed — patching \code{Max_Overdue}-style columns can
+reorder rows, so a patch counts as a change, not just an append.}
+
+\item{sort_desc}{Logical, recycled over \code{sort_columns}. Default \code{FALSE}.}
+
+\item{sort_match_case}{Should the sort be case-sensitive? Default \code{FALSE}.}
 }
 \value{
 The \code{\link[=od_xl_compare]{od_xl_compare()}} result invisibly (\code{list(append, patch, remove, table, new_cols)}).
@@ -74,3 +89,12 @@ Type coercion of \code{x} (factors → character, difftime/hms/Duration →
 numeric), \code{wb_types} auto-inference, and \code{coerce_tz} handling are all
 done by \code{\link[=od_xl_compare]{od_xl_compare()}} — see its docs for details.
 }
+\section{Performance}{
+
+All four phases run inside a single \code{\link[=xl_session_open]{xl_session_open()}} workbook session and
+share one \code{\link[=od_read]{od_read()}} of the workbook, rather than each paying its own
+download plus a server-side load/save per request. On a table needing ten
+row deletions that is the difference between ~1.1s and ~0.12s per deletion,
+plus three workbook downloads saved.
+}
+

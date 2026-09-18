@@ -12,7 +12,9 @@ od_xl_sort(
   match_case = FALSE,
   od = NULL,
   unprotect = FALSE,
-  sheet = NULL
+  sheet = NULL,
+  session = NULL,
+  wb = NULL
 )
 }
 \arguments{
@@ -42,6 +44,12 @@ which uses the table named \code{"Table1"} if the workbook has one, and
 otherwise the single table on the first worksheet. It comes last in the
 argument list so that existing positional calls keep working — pass it
 by name.}
+
+\item{session}{A graph session (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) used to batch
+operations and reduce time.}
+
+\item{wb}{An openxlsx2 workbook file (provided by \code{\link[=od_xl_sync]{od_xl_sync()}}) to use
+for checking instead of reading the file again.}
 }
 \value{
 the ms_drive_item (invisibly)
