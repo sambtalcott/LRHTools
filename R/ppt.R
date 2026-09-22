@@ -16,19 +16,46 @@ ppt_as_dml <- function(content) {
   }
 }
 
+#' Path helper for the Custom Office Templates folder
+#'
+#' Returns the local location of the Office template folder that OneDrive syncs
+#' under Documents. `~` is deliberately not used: under `Rscript`,
+#' `path.expand("~")` resolves to the mapped home drive (`W:/`), which is often
+#' disconnected. Can be run with arguments like [file.path()].
+#'
+#' @param ... additional arguments passed to [file.path()]
+#'
+#' @returns a file path
+#' @export
+#' @md
+office_template_path <- function(...) {
+
+  # Documents is redirected into OneDrive on this machine
+  roots <- Sys.getenv(c("OneDriveCommercial", "OneDrive", "USERPROFILE"))
+  roots <- roots[nzchar(roots)]
+  if (!length(roots)) cli::cli_abort("Could not determine a home folder for Office templates")
+
+  f <- file.path(roots[[1]], "Documents", "Custom Office Templates")
+
+  if (!dir.exists(f)) cli::cli_abort("Could not find Office template folder at {.path {f}}")
+
+  normalizePath(file.path(f, ...), winslash = "/")
+}
+
 #' Create new Powerpoint
 #'
 #' Extends [officer] to create a new LRH Data PPT Slide with a title and subtitle
 #'
 #' @param title Title Text (optional)
 #' @param subtitle Subtitle Text (optional)
-#' @param template_loc Location of PPT Template
+#' @param template_loc Location of PPT Template. Defaults to the LRH Quality
+#'   template in [office_template_path()].
 #'
 #' @returns a rpptx object from [officer]
 #' @md
 #' @export
 ppt_lrh <- function(title = NULL, subtitle = NULL,
-                    template_loc = "~/Custom Office Templates/LRH Quality PPT Template.potx") {
+                    template_loc = office_template_path("LRH Quality PPT Template.potx")) {
 
   p <- officer::read_pptx(template_loc)
   if (!is.null(title)) {

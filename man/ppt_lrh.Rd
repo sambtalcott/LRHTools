@@ -7,7 +7,7 @@
 ppt_lrh(
   title = NULL,
   subtitle = NULL,
-  template_loc = "~/Custom Office Templates/LRH Quality PPT Template.potx"
+  template_loc = office_template_path("LRH Quality PPT Template.potx")
 )
 }
 \arguments{
@@ -15,7 +15,8 @@ ppt_lrh(
 
 \item{subtitle}{Subtitle Text (optional)}
 
-\item{template_loc}{Location of PPT Template}
+\item{template_loc}{Location of PPT Template. Defaults to the LRH Quality
+template in \code{\link[=office_template_path]{office_template_path()}}.}
 }
 \value{
 a rpptx object from \link[officer:officer]{officer}
