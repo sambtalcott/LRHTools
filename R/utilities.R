@@ -78,31 +78,23 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
   # Generate similarity df
   new_names <- setdiff(names, alias$name_new)
 
-  # Normalize each unique name once, then look up per pair instead of
-  # re-normalizing for every grid row
-  all_names <- unique(c(alias$name_new, new_names))
-  norm_lookup <- normalize_names(all_names)
-  names(norm_lookup) <- all_names
-  pair_sim <- function(a, b) stringdist::stringsim(norm_lookup[a], norm_lookup[b])
-
-  a_a <- name_grid(alias$name_new) |>
-    dplyr::mutate(sim = pair_sim(a, b),
-                  type = "Alias - Alias Check (Fix Manually)")
-
-  n_a <- name_grid(new_names, alias$name_new) |>
-    dplyr::mutate(sim = pair_sim(a, b),
-                  type = "Name - Alias Check (ALWAYS choose b)")
-
-  n_n <- name_grid(new_names) |>
-    dplyr::mutate(sim = pair_sim(a, b),
-                  type = "Name - Name Check (Choose a or b)")
-
-  final <- dplyr::bind_rows(a_a, n_a, n_n) |>
+  final <- dplyr::bind_rows(
+    name_sim_pairs(alias$name_new) |>
+      dplyr::mutate(type = "Alias - Alias Check (Fix Manually)"),
+    name_sim_pairs(new_names, alias$name_new) |>
+      dplyr::mutate(type = "Name - Alias Check (ALWAYS choose b)"),
+    name_sim_pairs(new_names) |>
+      dplyr::mutate(type = "Name - Name Check (Choose a or b)")
+  ) |>
     dplyr::arrange(dplyr::desc(sim))
 
-  if (dplyr::filter(final, sim >= sensitivity) |> nrow() > 0) {
-    # Open in excel. Type "a" or "b" to process into keeping a name and save
-    file <- final |> dplyr::mutate(keep = NA) |> lrh_excel()
+  audit <- dplyr::filter(final, sim >= sensitivity)
+
+  if (nrow(audit) > 0) {
+    # Open in excel. Type "a" or "b" to process into keeping a name and save.
+    # Only pairs at/above sensitivity are written -- the full grid can run to
+    # hundreds of thousands of rows, which is slow to write and to review
+    file <- audit |> dplyr::mutate(keep = NA) |> lrh_excel()
 
     cli::cli_inform(c("Name Audit Triggered. Check and update if needed",
                       i = "Update the file with {.val a} or {.val b} to decide which to use.",
@@ -125,6 +117,30 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
   }
 
   invisible(final)
+}
+
+#' Pairwise name similarities
+#'
+#' Same pairs as `name_grid()` -- every a/b combination, or each unordered pair
+#' once when `b` is omitted -- but scored with one vectorized
+#' `stringsimmatrix()` call over normalized names instead of building and
+#' de-duplicating the full string grid.
+#'
+#' @param a names
+#' @param b names to compare against; `NULL` compares `a` with itself
+#' @returns a tibble of `a`, `b`, `sim`
+#' @noRd
+name_sim_pairs <- function(a, b = NULL) {
+  a <- sort(unique(a[!is.na(a)]))
+  self <- is.null(b)
+  b <- if (self) a else sort(unique(b[!is.na(b)]))
+
+  m <- stringdist::stringsimmatrix(normalize_names(a), normalize_names(b))
+  # Self comparison: lower triangle only (a > b), matching name_grid()'s kept order
+  idx <- if (self) which(lower.tri(m), arr.ind = TRUE) else arrayInd(seq_along(m), dim(m))
+
+  tibble::tibble(a = a[idx[, 1]], b = b[idx[, 2]], sim = m[idx]) |>
+    dplyr::filter(a != b)
 }
 
 #' Create a name grid
