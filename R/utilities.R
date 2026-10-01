@@ -52,12 +52,21 @@ name_sim <- function(a, b) {
 #' @param sensitivity How similar do names need to be to trigger an audit? Set
 #' to 0 to always audit.
 #' @param print How many rows of the table should be printed? Set to 0 or FALSE to hide
+#' @param exclude_table table of name pairs (`name_a`, `name_b`) confirmed to be
+#'   different people. These pairs are never audited. Pairs marked `x` in the
+#'   audit file are added to it (the table is created on first use).
 #'
-#' @returns the name check data frame, invisibly
+#' @returns the name check data frame (excluded pairs removed), invisibly
 #' @export
 alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensitivity = 0.7,
-                        print = 10) {
+                        print = 10, exclude_table = paste0(table, "_EXCLUDE")) {
   alias <- pull_duckdb(table)
+
+  exclude <- if (DBI::dbExistsTable(lrh_con(type = "any"), exclude_table)) {
+    pull_duckdb(exclude_table)
+  } else {
+    tibble::tibble(name_a = character(0), name_b = character(0))
+  }
 
   # Validate
   old_match <- intersect(names, alias$name_old)
@@ -86,30 +95,52 @@ alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensi
     name_sim_pairs(new_names) |>
       dplyr::mutate(type = "Name - Name Check (Choose a or b)")
   ) |>
+    # Drop known different-people pairs, in either orientation
+    dplyr::anti_join(exclude, by = c(a = "name_a", b = "name_b")) |>
+    dplyr::anti_join(exclude, by = c(a = "name_b", b = "name_a")) |>
     dplyr::arrange(dplyr::desc(sim))
 
   audit <- dplyr::filter(final, sim >= sensitivity)
 
   if (nrow(audit) > 0) {
-    # Open in excel. Type "a" or "b" to process into keeping a name and save.
+    # Open in excel. Type "a", "b" or "x" and save.
     # Only pairs at/above sensitivity are written -- the full grid can run to
     # hundreds of thousands of rows, which is slow to write and to review
     file <- audit |> dplyr::mutate(keep = NA) |> lrh_excel()
 
     cli::cli_inform(c("Name Audit Triggered. Check and update if needed",
-                      i = "Update the file with {.val a} or {.val b} to decide which to use.",
-                      i = "Save, close and then press enter to update the {.val PG_PROVIDER_ALIAS} table",
+                      i = "Update {.var keep} with {.val a} or {.val b} to decide which to use,
+                           or {.val x} if they are different people.",
+                      i = "Save, close and then press enter to update {.val {table}} / {.val {exclude_table}}",
                       i = "Re-run the script when finished to re-sync aliases"))
     readline()
 
-    y <- openxlsx2::read_xlsx(file)
-    y2 <- y |>
-      dplyr::filter(!is.na(keep)) |>
+    y <- openxlsx2::read_xlsx(file) |>
+      dplyr::mutate(keep = stringr::str_to_lower(stringr::str_trim(as.character(keep)))) |>
+      dplyr::filter(!is.na(keep), keep != "")
+
+    bad_keep <- setdiff(y$keep, c("a", "b", "x"))
+    if (length(bad_keep) > 0) {
+      cli::cli_abort(c("x" = "{.var keep} must be {.val a}, {.val b} or {.val x}",
+                       "i" = "Found {.val {bad_keep}}. Nothing was updated."))
+    }
+
+    y_alias <- y |>
+      dplyr::filter(keep %in% c("a", "b")) |>
       dplyr::transmute(name_old = dplyr::recode_values(keep, "a" ~ b, "b" ~ a),
                        name_new = dplyr::recode_values(keep, "a" ~ a, "b" ~ b))
 
-    append_duckdb(y2, table)
-    cli::cli_abort(c("v" = "{.val {table}} updated. Rerun the script that triggered this"))
+    y_exclude <- y |>
+      dplyr::filter(keep == "x") |>
+      dplyr::transmute(name_a = pmin(a, b), name_b = pmax(a, b))
+
+    if (nrow(y_alias) > 0) append_duckdb(y_alias, table)
+    if (nrow(y_exclude) > 0) append_duckdb(y_exclude, exclude_table)
+    cli::cli_abort(c(
+      "v" = "Added {nrow(y_alias)} alias{?es} to {.val {table}} and
+             {nrow(y_exclude)} exclusion{?s} to {.val {exclude_table}}.",
+      "i" = "Rerun the script that triggered this"
+    ))
   }
 
   if (print > 0) {

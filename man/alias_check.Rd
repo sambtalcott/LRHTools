@@ -8,7 +8,8 @@ alias_check(
   names = character(0),
   table = "PG_PROVIDER_ALIAS",
   sensitivity = 0.7,
-  print = 10
+  print = 10,
+  exclude_table = paste0(table, "_EXCLUDE")
 )
 }
 \arguments{
@@ -20,9 +21,13 @@ alias_check(
 to 0 to always audit.}
 
 \item{print}{How many rows of the table should be printed? Set to 0 or FALSE to hide}
+
+\item{exclude_table}{table of name pairs (`name_a`, `name_b`) confirmed to be
+different people. These pairs are never audited. Pairs marked `x` in the
+audit file are added to it (the table is created on first use).}
 }
 \value{
-the name check data frame, invisibly
+the name check data frame (excluded pairs removed), invisibly
 }
 \description{
 Check names against current aliases
