@@ -45,7 +45,45 @@ name_sim <- function(a, b) {
   stringdist::stringsim(normalize_names(a), normalize_names(b))
 }
 
+#' Alias personnel names
+#'
+#' R counterpart of the DuckDB macro `prsnl_alias()` (sql/02_macros.sql), for
+#' local data such as manual spreadsheets. The distinct names are registered
+#' with DuckDB and run through the macro there, so local and database data are
+#' aliased by exactly the same rule. Inside a dbplyr pipeline, call
+#' `prsnl_alias()` directly -- dbplyr passes it through to the macro.
+#'
+#' @param x character vector of names
+#'
+#' @returns `x` with aliased names substituted (unmatched names and `NA`
+#'   unchanged)
+#' @export
+prsnl_alias <- function(x) {
+  con <- lrh_con(type = "any")
+  nm <- tibble::tibble(nm = unique(as.character(x)))
+  tmp <- paste0("prsnl_alias_tmp_", as.integer(stats::runif(1, 1, 1e9)))
+  duckdb::duckdb_register(con, tmp, nm)
+  on.exit(duckdb::duckdb_unregister(con, tmp), add = TRUE)
+  map <- DBI::dbGetQuery(con, paste0("SELECT nm, prsnl_alias(nm) AS new FROM ", tmp))
+  map$new[match(x, map$nm)]
+}
+
 #' Check names against current aliases
+#'
+#' Runs integrity checks on the alias table, then (optionally) a similarity
+#' audit of `names` against it.
+#'
+#' Integrity checks (errors, or warnings when `strict = FALSE`):
+#' * `name_old` is unique and non-missing -- required by the `prsnl_alias()`
+#'   DuckDB macros, whose lookup errors on duplicate matches
+#' * no value appears in both `name_old` and `name_new` (aliases are one step)
+#' * `names` contains no `name_old` values (names should be aliased first)
+#'
+#' Informational: aliases keyed on a *former* Cerner name. When `history` and
+#' `current` exist, rows whose `name_old` is a name an id used to have, but
+#' Cerner now uses a different name for that id (with no alias of its own), are
+#' listed. Data with an id has moved to the new name; name-only sources still
+#' map through the old row, so the person is split until the alias is updated.
 #'
 #' @param names character vector of names to check
 #' @param table table to check names against
@@ -55,34 +93,87 @@ name_sim <- function(a, b) {
 #' @param exclude_table table of name pairs (`name_a`, `name_b`) confirmed to be
 #'   different people. These pairs are never audited. Pairs marked `x` in the
 #'   audit file are added to it (the table is created on first use).
+#' @param audit Run the interactive similarity audit? `FALSE` runs only the
+#'   integrity and informational checks (e.g. for unattended runs).
+#' @param strict Abort on integrity problems? `FALSE` downgrades them to warnings.
+#' @param history,current name-history (`prsnl_id`, `prsnl_name`) and
+#'   current-name (`prsnl_id`, `prsnl_name`) tables for the stale-alias check.
+#'   Skipped if either doesn't exist.
 #'
-#' @returns the name check data frame (excluded pairs removed), invisibly
+#' @returns the name check data frame (excluded pairs removed), invisibly; with
+#'   `audit = FALSE`, the stale-alias rows instead
 #' @export
 alias_check <- function(names = character(0), table = "PG_PROVIDER_ALIAS", sensitivity = 0.7,
-                        print = 10, exclude_table = paste0(table, "_EXCLUDE")) {
+                        print = 10, exclude_table = paste0(table, "_EXCLUDE"),
+                        audit = TRUE, strict = TRUE,
+                        history = "prsnl_names_hx", current = "prsnl_mview") {
+  con <- lrh_con(type = "any")
   alias <- pull_duckdb(table)
 
-  exclude <- if (DBI::dbExistsTable(lrh_con(type = "any"), exclude_table)) {
+  exclude <- if (DBI::dbExistsTable(con, exclude_table)) {
     pull_duckdb(exclude_table)
   } else {
     tibble::tibble(name_a = character(0), name_b = character(0))
   }
 
-  # Validate
-  old_match <- intersect(names, alias$name_old)
-  if (length(old_match) > 0) {
-    cli::cli_abort(c(
-      "x" = "{.var names} contains values in the {.var name_old} column of {.val {table}}",
-      "i" = "Check that names are being properly recategorized before this step."
+  problem <- function(msg) {
+    if (strict) cli::cli_abort(msg, call = NULL) else cli::cli_warn(msg)
+  }
+
+  # Integrity checks
+  dup_old <- alias |>
+    dplyr::filter(is.na(name_old) | is.na(name_new) |
+                    name_old %in% name_old[duplicated(name_old)])
+  if (nrow(dup_old) > 0) {
+    print(dup_old)
+    problem(c(
+      "x" = "Table {.val {table}} has duplicate or missing {.var name_old}/{.var name_new} values",
+      "i" = "Each {.var name_old} must appear once -- the {.fn prsnl_alias} macros error on multiple matches."
     ))
   }
 
   if (any(alias$name_old %in% alias$name_new)) {
     print(dplyr::filter(alias, name_old %in% name_new | name_new %in% name_old))
-    cli::cli_abort(c(
+    problem(c(
       "x" = "Table {.val {table}} contains the same value(s) in {.var name_old} and {.var name_new}"
     ))
   }
+
+  old_match <- intersect(names, alias$name_old)
+  if (length(old_match) > 0) {
+    problem(c(
+      "x" = "{.var names} contains values in the {.var name_old} column of {.val {table}}",
+      "i" = "Check that names are being properly recategorized before this step."
+    ))
+  }
+
+  # Informational: aliases keyed on a name Cerner no longer uses for that id
+  stale <- tibble::tibble()
+  if (DBI::dbExistsTable(con, history) && DBI::dbExistsTable(con, current)) {
+    stale <- tibble::as_tibble(DBI::dbGetQuery(con, glue::glue("
+      SELECT a.name_old, a.name_new, h.prsnl_id, c.prsnl_name AS cerner_now
+      FROM {table} a
+      JOIN {history} h ON h.prsnl_name = a.name_old
+      JOIN {current} c ON c.prsnl_id = h.prsnl_id
+      WHERE c.prsnl_name <> a.name_old
+        AND c.prsnl_name <> a.name_new
+        AND c.prsnl_name NOT IN (SELECT name_old FROM {table})
+      ORDER BY a.name_old")))
+
+    if (nrow(stale) > 0) {
+      cli::cli_inform(c(
+        "i" = "{nrow(stale)} alias{?es} in {.val {table}} {?is/are} keyed on a former Cerner name:",
+        stats::setNames(
+          glue::glue("{stale$name_old} -> {stale$name_new} (Cerner now: {stale$cerner_now})"),
+          rep("*", nrow(stale))
+        ),
+        " " = "Data with a prsnl id now shows the Cerner name. To keep the alias, add
+               {.code name_old = <Cerner now>} with the same {.var name_new}."
+      ))
+    }
+  }
+
+  if (!audit) return(invisible(stale))
 
   # Generate similarity df
   new_names <- setdiff(names, alias$name_new)

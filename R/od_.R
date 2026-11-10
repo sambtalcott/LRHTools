@@ -2053,7 +2053,7 @@ od_download <- function(src, dest = basename(src), od = NULL, overwrite = FALSE)
   # Check for existing source file
   if (!od_exists(src, od = od)) {
     cli::cli_abort(c(
-      "x" = "File {.val {path}} does not exist in the current OneDrive"
+      "x" = "File {.val {src}} does not exist in the current OneDrive"
     ))
   }
 

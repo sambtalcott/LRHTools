@@ -9,7 +9,11 @@ alias_check(
   table = "PG_PROVIDER_ALIAS",
   sensitivity = 0.7,
   print = 10,
-  exclude_table = paste0(table, "_EXCLUDE")
+  exclude_table = paste0(table, "_EXCLUDE"),
+  audit = TRUE,
+  strict = TRUE,
+  history = "prsnl_names_hx",
+  current = "prsnl_mview"
 )
 }
 \arguments{
@@ -25,10 +29,34 @@ to 0 to always audit.}
 \item{exclude_table}{table of name pairs (`name_a`, `name_b`) confirmed to be
 different people. These pairs are never audited. Pairs marked `x` in the
 audit file are added to it (the table is created on first use).}
+
+\item{audit}{Run the interactive similarity audit? `FALSE` runs only the
+integrity and informational checks (e.g. for unattended runs).}
+
+\item{strict}{Abort on integrity problems? `FALSE` downgrades them to warnings.}
+
+\item{history, current}{name-history (`prsnl_id`, `prsnl_name`) and
+current-name (`prsnl_id`, `prsnl_name`) tables for the stale-alias check.
+Skipped if either doesn't exist.}
 }
 \value{
-the name check data frame (excluded pairs removed), invisibly
+the name check data frame (excluded pairs removed), invisibly; with
+  `audit = FALSE`, the stale-alias rows instead
 }
 \description{
-Check names against current aliases
+Runs integrity checks on the alias table, then (optionally) a similarity
+audit of `names` against it.
+}
+\details{
+Integrity checks (errors, or warnings when `strict = FALSE`):
+* `name_old` is unique and non-missing -- required by the `prsnl_alias()`
+  DuckDB macros, whose lookup errors on duplicate matches
+* no value appears in both `name_old` and `name_new` (aliases are one step)
+* `names` contains no `name_old` values (names should be aliased first)
+
+Informational: aliases keyed on a *former* Cerner name. When `history` and
+`current` exist, rows whose `name_old` is a name an id used to have, but
+Cerner now uses a different name for that id (with no alias of its own), are
+listed. Data with an id has moved to the new name; name-only sources still
+map through the old row, so the person is split until the alias is updated.
 }
