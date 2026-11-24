@@ -126,7 +126,7 @@ lrh_excel <- function(x, widths = "auto", table_style = "TableStyleMedium1",
   # Save with retries (transient AV/endpoint-security locks on fresh zips)
   wb_save_retry(wb, file, overwrite = overwrite)
 
-  if (open) shell.exec(file)
+  if (open) shell.exec(normalizePath(file))
 
   if (return_wb) invisible(wb) else invisible(file)
 }
